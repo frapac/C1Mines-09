@@ -9,14 +9,14 @@
 #' The following project is implemented in Julia, using the
 #' optimization modeler JuMP.
 #' - If you are new to the Julia language, we recommend the [following introduction](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_julia/).
-#' - If you are new to optimization modeler, we recommend the [following tutorial](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_JuMP/)
+#' - If you are new to optimization modeler, we recommend the [following tutorial](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_JuMP/).
 
 #' The project is inspired by recent works on the optimal management
 #' of energy storage using Stochastic Dynamic Programming. In particular, we acknowledge
 #' the [following article](https://ieeexplore.ieee.org/abstract/document/9721005).
 
 #' # Introduction
-#' Energy storage are becoming one of the major technology
+#' Energy storage are becoming a major player
 #' to [operate a modern grid](https://blog.gridstatus.io/caiso-batteries-apr-2024/).
 #' In this tutorial, we are interested in finding the optimal policy to
 #' manage a battery when the future energy prices are unknown.
@@ -29,7 +29,7 @@
 #' market [EPEX](https://www.epexspot.com/en/market-data), in the year 2016.
 #' The spot price is sampled at an hourly time-step during 3 days (giving a total
 #' of 72 time-steps). We import the data and plot the evolution of the price
-#' during the three days using the following code:
+#' using the following code:
 
 using DelimitedFiles
 using Plots
@@ -47,19 +47,19 @@ ylabel!("Energy price (€)")
 #' ---
 
 #' # Part I: Deterministic model
-#' Before building a stochastic model for the energy price, we look at the
+#' Before looking at a stochastic model for the energy price, we analyze the
 #' deterministic solution.
 #' We start by writing a mathematical model for our energy storage. We introduce
 #' the following parameters:
-#' - ``C``: battery capacity (in MWh)
-#' - ``P``: maximum battery charge/discharge in one hour (in MWh)
+#' - ``C``: battery capacity [MWh]
+#' - ``P``: maximum battery charge/discharge in one hour [MWh]
 #' - ``η_p``: charge efficiency
 #' - ``η_d``: discharge efficiency
-#' - ``c``: tax paid when injecting energy onto the network (in €/MWh)
+#' - ``c``: tax paid when injecting energy onto the network [€/MWh]
 #' Our decision variables are:
-#' - ``x_t``: Energy stored in the battery at time (SoC) ``t`` (in MWh)
-#' - ``p_t``: Energy discharged from the battery between ``t`` and ``t+1`` (in MWh).
-#' - ``b_t``: Energy charged to the battery between ``t`` and ``t+1`` (in MWh).
+#' - ``x_t``: State-of-Charge (SoC) of the battery at time ``t`` [MWh]
+#' - ``p_t``: Energy discharged from the battery between ``t`` and ``t+1`` [MWh].
+#' - ``b_t``: Energy charged to the battery between ``t`` and ``t+1`` [MWh].
 #' The price at time ``t`` is denoted by ``λ_t``.
 #' The operational constraints are
 #' ```math
@@ -76,7 +76,8 @@ ylabel!("Energy price (€)")
 #' ```math
 #' ∑_{t=1}^T \Big( λ_t (b_t - p_t) + c p_t \Big)
 #' ```
-#' The optimization problem writes as a Linear Program (LP).
+#' We suppose that initially the battery is discharged: ``x_0 = 0``.
+#' The deterministic optimization problem writes as a Linear Program (LP).
 #' ```math
 #' \begin{aligned}
 #' \min & \; ∑_{t=1}^T \Big( λ_t (b_t - p_t) + c p_t \Big) \\
@@ -93,7 +94,7 @@ ylabel!("Energy price (€)")
 #'
 #' ---
 
-#' The data of the problem are stored in a structure `BatteryData`
+#' In what follows, we store the data of the problem in a structure `BatteryData`
 
 struct BatteryData
     C::Float64
@@ -107,7 +108,7 @@ end
 
 data = BatteryData(5.0, 1.0, 1.0, 0.9, 0.9);
 
-#' We implement the LP problem using the modeler JuMP.
+#' We start by implementing the LP problem using the modeler JuMP.
 
 using JuMP
 
@@ -131,7 +132,7 @@ function build_deterministic_model(data::BatteryData, price::Vector)
 end
 
 #' For a solver, we use the open-source [HiGHS](https://ergo-code.github.io/HiGHS/stable/).
-#' Solving the LP using JuMP just amount to
+#' Solving the LP using JuMP just amount to the following lines:
 
 using HiGHS
 
@@ -148,7 +149,7 @@ JuMP.optimize!(det_model)
 JuMP.objective_value(det_model)
 
 #' We can plot the solution using the following lines:
-x_sol = JuMP.value.(det_model[:x])
+x_sol = JuMP.value.(det_model[:x])  # get optimal SoC
 plot(x_sol, lw=2.0, color=:black, label="Battery level")
 
 #' ---
@@ -174,18 +175,19 @@ plot(x_sol, lw=2.0, color=:black, label="Battery level")
 #' λ_t(ω) = \overline{λ}_t ×  \exp{ξ_t(ω) }
 #' ```
 #' At each time step ``ξ_t(ω)`` can take ``N`` distinct values ``ξ_1, ⋯, ξ_N``.
+#' The number ``N`` is called the *lattice number* of the Markov chain.
 #' The transition between ``ξ_{t}`` and ``ξ_{t+1}`` are encoded by the following
 #' conditional probabilities:
 #' ```math
 #' \mathbb{P}[ ξ_{t+1} = ξ_j \; | \; ξ_t = ξ_i ] = p_{ij}
 #' ```
-#' The values and the transition probabilities are stored as text files in the
+#' The values and transition probabilities are stored as text files in the
 #' directory `data`. We provide a set of util functions to manipulate stationary
 #' Markov chain in the script `markov.jl`:
 
 include("markov.jl");
 
-#' To import a Markov chain with a discretization size ``N = 4``:
+#' E.g., to import a Markov chain with a discretization size ``N = 4``:
 
 markov = import_markov_chain(4);
 
@@ -197,13 +199,13 @@ markov.proba
 
 markov.x
 
-#' You can increase the discretization size up to 32 (``N`` can take
+#' You can increase the discretization size up to 32 (in fact, ``N`` can take
 #' any values in ``\{4, 8, 16, 32 \}``).
 
 #' The Markov chain `markov` defines our probabilistic model. The future energy prices
 #' are now uncertains, with probability distribution given by the Markov chain. You can
 #' sample a given number of scenarios from the Markov chain using the
-#' function ``generate_price_scenarios``:
+#' function `generate_price_scenarios`:
 
 n_scenarios = 10
 scenarios = generate_price_scenarios(markov, price, n_scenarios)
@@ -227,10 +229,9 @@ ylabel!("Energy price (€)")
 #'             & x_0 = 0
 #' \end{aligned}
 #' ```
-#' We want to solve the stochastic problem using the Stochastic Dynamic Programming algorithm.
+#' We want to solve the previous stochastic problem using the Stochastic Dynamic Programming algorithm.
 #' For our Markovian model, the Dynamic Programming equations adapt as follows.
-#' The ``Q`` value function satisfies the recursive equations: Starting from ``V_T(x) = 0``,
-#' we solve
+#' The value functions ``\{ Q_{t,j} \}_{t,j}`` satisfy the recursive equations: Starting from ``V_T(x) = 0``,
 #' ```math
 #' Q_{t, j}(x_t) = \left\{
 #' \begin{aligned}
@@ -242,7 +243,7 @@ ylabel!("Energy price (€)")
 #' \end{aligned}
 #' \right.
 #' ```
-#' and update the value function ``V_{t, i}`` as
+#' and update the value function ``V_{t, i}`` for ``i = 1, ⋯, N`` as
 #' ```math
 #' V_{t, i} = ∑_{j=1}^N p_{ij} Q_{t, j}
 #' ```
@@ -252,6 +253,9 @@ ylabel!("Energy price (€)")
 #' in a Markovian setting.
 #'
 #' ---
+
+
+#' #### Discretization
 
 #' We discretize each value function on a grid ``\{x^1, ⋯, x^d \}``, and define
 #' ```math
@@ -284,7 +288,7 @@ ylabel!("Energy price (€)")
 #'
 #' ---
 
-#' We define a function that takes as input the discretize value function ``V_{t,i}`` and write
+#' We define a function that takes as input the discretized value function ``V_{t,i}`` and implements
 #' the previous LP using JuMP.
 
 function build_subproblem_dp(data, price, xp, Vp, optimizer, n_grid)
@@ -312,7 +316,7 @@ end
 
 #' ---
 #' **Question 7.** Use the function `build_subproblem_dp` to implement the
-#' Stochastic Dynamic Programming algorithm.
+#' Stochastic Dynamic Programming algorithm. We give here-after a skeleton for the implementation.
 #'
 #' ---
 
@@ -345,14 +349,14 @@ end
 #' ---
 #' **Question 8.** Set ``N=4`` and ``d = 101``. Solve the Dynamic Programming equations using the function `solve_dp`.
 #' Compute the numerical optimal solution returned by the algorithm. Plot the value functions
-#' at time ``t ∈ \{1, 25, 49, 72 \}`` at the first lattice.
+#' at time ``t ∈ \{1, 25, 49, 72 \}`` at the lattice ``n=1``.
 #'
 #' ---
 
 
 #' ---
-#' **Question 9.** Set ``N = 4``. How does the objective returned by SDP
-#' evolve as we increase the discretization size ``d``? Hint: take ``d ∈ \{11, 51, 101, 501, 1001 \}``.
+#' **Question 9.** Set ``N = 4``. How does the numerical objective computed by SDP
+#' evolves as we increase the discretization size ``d``? Hint: take ``d ∈ \{11, 51, 101, 501, 1001 \}``.
 #' What is the impact of the discretization on the solution time?
 #'
 #' ---
@@ -374,7 +378,7 @@ end
 
 
 #' ---
-#' **Question 12.** Let ``λ^i ∈ \mathbb{R}^T`` be a random realization of the price process ``\{λ_t(ω)\}_t``.
+#' **Question 12.** Let ``λ^i = (λ^i_1, ⋯, λ^i_T) ∈ \mathbb{R}^T`` be a random realization of the price process ``\{λ_t(ω)\}_t``.
 #' Prove that for a given ``k``, the value ``\frac{1}{k} ∑_{i=1}^k v(λ^i)`` is a statistical lower-bound
 #' for the optimal value. Give a confidence interval. Compute numerically the upper-bound for ``N=8``.
 #'
@@ -428,9 +432,9 @@ end
 
 #' ---
 #' **Question 13.** Do you think `NaivePolicy` is a good policy?
-#' Generate 1,000 scenarios using `generate_price_scenarios` and simulate the behavior
+#' Generate 1,000 scenarios using the function `generate_price_scenarios` and simulate the behavior
 #' of `NaivePolicy` using `simulate_policy`. Plot the histogram of the cost and the evolution of
-#' 10 trajectory for the state-of-charge of the battery. Is the naive policy profitable?
+#' 10 trajectories for the state-of-charge of the battery. Is the naive policy profitable?
 #'
 #' ---
 
@@ -472,10 +476,10 @@ end
 
 #' ---
 #' **Question 14.** Explain what `DPPolicy` is doing.
-#' Simulate the behavior of `DPPolicy on 1,000 scenarios.
-#' Plot the histogram of the cost and the evolution of 10 trajectory for the state-of-charge of the battery.
+#' Simulate the behavior of `DPPolicy` on 1,000 scenarios.
+#' Plot the histogram of the cost and the evolution of 10 trajectories for the state-of-charge of the battery.
 #' Compare the value obtained in simulation with
-#' (1) the numerical optimal value obtained by SDP.
+#' (1) the numerical optimal value obtained by SDP, and
 #' (2) the statistical lower-bound.
 #' Comment the results.
 #'
@@ -484,15 +488,15 @@ end
 
 #' # Part III: Expliciting the solution
 #' We have seen during the lecture that for linear problems, the optimal policy
-#' is polyhedral. Here, it turns out that the model is simple enough we can obtain
+#' is polyhedral. Here, it turns out that the model is simple enough so that we can obtain
 #' a complete characterization of the optimal solution. This brings two major simplifications:
 #' 1. We can remove the LP solver in the SDP algorithm to obtain a significant speed-up.
 #' 2. We can write up explicitly the optimal policy.
 
-#' We start by having a closer look at the optimal solution. We note by ``v_{t+1, i}`` an
-#' element of the subdifferential of the convex function ``V_{t+1, i}``:
+#' We start by having a closer look at the optimal solution. We note by ``v_{t, i}`` an
+#' element of the subdifferential of the convex function ``V_{t, i}``:
 #' ```math
-#' v_{t+1, i}(x) ∈ ∂ V_{t+1, i}(x)
+#' v_{t, i}(x) ∈ ∂ V_{t, i}(x)
 #' ```
 
 #' ---
@@ -502,7 +506,7 @@ end
 #' ---
 
 #' ---
-#' **Question 16.** Suppose that for all ``t``, the price is non-negative ``λ_t ≥ 0``. Is it
+#' **Question 16.** Suppose that for all ``t``, the price is non-negative: ``λ_t ≥ 0``. Is it
 #' a reasonable assumption? Show that in that case we cannot charge and discharge the battery simultaneously:
 #' ``p_t × b_t = 0``.
 #'
@@ -510,23 +514,23 @@ end
 
 #' ---
 #' **Question 17.** Deduce from Question 16 that only the three following situations can occur:
-#' - 1/ ``b > 0, p =0``.
-#' - 2/ ``b = 0, p =0``.
-#' - 3/ ``b = 0, p > 0``.
+#' - (1) ``b > 0, p =0``.
+#' - (2) ``b = 0, p =0``.
+#' - (3) ``b = 0, p > 0``.
 #' Use the KKT conditions to characterize each of the previous 3 situations using the problem's data.
 #'
 #' ---
 
 #' ---
 #' **Question 18.** Show that the sensitivity ``\{ v_{t, i} \}_t`` satisfies a set of
-#' recursive equations, analogous of the Dynamic Programming equations.
-#' Exploit this property to propose an alternative algorithm to SDP that does not rely on
+#' recursive equations, analogous to the Dynamic Programming equations.
+#' Exploit this property to propose an alternative algorithm that does not rely on
 #' a linear solver.
 #'
 #' ---
 
 #' ---
-#' **Question 19.** Implement the new algorithm and show it return the correct solution.
+#' **Question 19.** Implement the new algorithm and show it returns the correct solution.
 #' Compare its performance with the SDP algorithm implemented previously in the function `solve_dp`.
 #'
 #' ---
