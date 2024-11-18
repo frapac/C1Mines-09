@@ -1,0 +1,351 @@
+
+
+\begin{frame}{Stochastic programming with recourse}
+Consider the LP
+\[
+\left\{\begin{array}{ll}
+\displaystyle \min_{(x,y)\geq 0} & c^\top x+
+q^\top y\\
+ s.t. & Ax =  b \\&Tx+Wy=h
+\end{array}\right.
+\]
+Now suppose that some (or all) the data $q,T,W,h$ depend on some random vector $\omega$:
+\[
+\verm{q(\omega),\,T(\omega),\,W(\omega),\,h(\omega)}
+\]
+Decisions are sequential in nature:
+\begin{equation*}
+  x \leadsto \omega \leadsto y
+\end{equation*}
+We shall to give a ``meaning" to the random LP:
+$q(\omega)^\top y(\omega)$ is now random!
+\[
+\left\{\begin{array}{ll}
+\displaystyle \min_{(x,y(\omega))\geq 0} & c^\top x+
+q(\omega)^\top y(\omega)\\
+ s.t. & Ax =  b \\&T(\omega) x+W(\omega)y(\omega)=h(\omega)
+\end{array}\right.
+\]
+
+\pula
+\verm{A manner is to minimize the expected cost}
+\end{frame}
+\begin{frame}{Two-stage stochastic linear programs with recourse - 2SLP}
+
+Minimizing the present cost \verm{\large +} the expected value of the future costs
+\pula
+
+\begin{block}{Optimization on average}
+\[
+\left\{\begin{array}{ll}
+\displaystyle \min_{(x,y(\omega))\geq 0} & c^\top x+
+\E[q(\omega)^\top y(\omega)]\\
+ s.t. & Ax =  b \\&T(\omega) x+W(\omega)y(\omega)=h(\omega) \; a.s.
+\end{array}\right.
+\]
+(a.s. = almost surely)
+\end{block}
+
+\begin{itemize}
+  \item $x$ represents the \emph{here-and-now} variables \\ (the decisions we have to make in the present)
+  \item $y(\omega)$ represents the \emph{wait-and-see} decisions, a.k.a \emph{recourse} \\ (the decisions we have to make in the future, depending on the scenario)
+\item $W(\omega)$ is the matrix of recourse, and the matrix of technologies $T(\omega)$ couples the variables $x$ and $y$
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Finitely many scenarios}
+%Consider $N$ scenarios $\xi^i$, $i=1,\ldots, N$, with associated probability $p_i >0$ (e.g. $1/N$)
+In two-stage stochastic linear programming problems with finitely many scenarios
+\verm{$(q^i,T^i,W^i,h^i)$}, $i=1,\ldots,N$, we wish to solve the high dimensional problem
+\begin{block}{Deterministic equivalent}
+\[
+\left\{
+\begin{array}{ll}
+\displaystyle \min_{x,y^i} & c^\top x+\sum_{i=1}^N p_i [q^{i\,\top} y^i]\\
+\mbox{s.t.} & Ax =  b,\; x\geq 0 \\&T^i x+W^i y^i=h^i,\; y^i\geq 0, \; i=1,\ldots,N\\
+\end{array}
+\right.
+\]
+
+\pula
+
+\pause
+\azul{This is a LP with a block-arrowhead structure!}
+
+
+\[
+\left\{
+\begin{array}{lllllllllllll}
+\min & c^\top x &+ p_1q^{1\,\top} y^1  &+ p_2q^{2\,\top} y^2 &+ \cdots  &+ p_Nq^{N\,\top} y^N \\
+\mbox{s.t}& Ax =b\\
+&\\
+& T^1x           &+ W^1y^1&&&&= h^1 \\
+& T^2x           &&+ W^2y^2&&&= h^2 \\
+& \vdots         &&&\ddots \\
+& T^Nx           &&&&+ W^Ny^N&= h^N \\
+&\\
+&(x, y)\geq 0
+\end{array}
+\right.
+\]
+
+\end{block}
+\end{frame}
+
+\begin{frame}{Some orders of magnitude}
+  How fast can we solve a large-scale LP using a state-of-the-art solver?
+
+
+  \begin{table}
+  \begin{tabular}{rrr}
+    \hline
+    n & m & Solve time (s) \\
+    \hline
+    85M & 98M & 6,000 \\
+    223M & 254M & 66,100 \\
+    \hline
+  \end{tabular}
+  \caption{Time to solve a LP with $n$ variables, $m$ constraints}
+  \end{table}
+
+  \vspace{2cm}
+
+  Source:
+  \begin{itemize}
+    \item Rehfeldt, D., Hobbie, H., Schönheit, D., Koch, T., Möst, D., \& Gleixner, A. (2022).
+      \emph{A massively parallel interior-point solver for LPs with generalized arrowhead structure, and applications to energy system models.}
+  \end{itemize}
+
+
+\end{frame}
+
+
+\begin{frame}{Finitely many scenarios}
+In two-stage stochastic linear programming problems with finitely many scenarios
+\verm{$(q^i,T^i,W^i,h^i)$}, $i=1,\ldots,N$, we wish to solve the high dimensional problem
+\begin{block}{Deterministic equivalent problem}
+\[
+\left\{
+\begin{array}{lllllllllllll}
+\min & c^\top x &+ p_1q^{1\,\top} y^1  &+ p_2q^{2\,\top} y^2 &+ \cdots  &+ p_Nq^{N\,\top} y^N \\
+\mbox{s.t}& \verm{x \in X, \;y \in Y}  \\
+&\\
+& T^1x           &+ W^1y^1&&&&= h^1 \\
+& T^2x           &&+ W^2y^2&&&= h^2 \\
+& \vdots         &&&\ddots \\
+& T^Nx           &&&&+ W^Ny^N&= h^N
+\end{array}
+\right.
+\]
+
+\azul{We can have "mixed-integer constraints" in $X$ and $Y$}
+\pula
+
+\verm{However, depending on $N$ the deterministic equivalent problem cannot be solved directly...}
+\end{block}
+
+\begin{itemize}
+\item \# variables: $n_x + N\, n_y$
+\item \# constraints: $m_x + N\, n_y$
+\end{itemize}
+
+
+\verm{The deterministic equivalent problem is only useful when $N$ is small enough...}
+
+\end{frame}
+%
+%\begin{frame}{Computational practice}
+%\begin{center}
+%\azul{\shadowbox{Power generation planning under uncertainty}}
+%\end{center}
+%\pula
+%Consider the problem available at the link \newline
+%{\scriptsize
+%\url{https://colab.research.google.com/drive/1mJGxrpmOPnG8cJMlNPxULxj-vUsOg6ql?usp=sharing}
+%}
+%\pula
+%
+%\verm{Tasks:}
+%\begin{enumerate}
+%\item Solve the $N$ scenario subproblems and compute the first-stage solutions $\bar x(\omega^i)$, $i=1,\ldots,N$
+%\item Compute the average solution
+%\[
+%x^{\tt av}= \frac{1}{N}\sum_{i=1}^N \bar x(\omega^i)
+%\]
+%\item Compute the expected cost of the average solution
+%
+%\item Compute a solution $x^{\tt SP}$ by solving the equivalent deterministic problem
+%
+%\item Compare $x^{\tt SP}$, $x^{\tt av}$ and their expected cost
+%\end{enumerate}
+%
+%\end{frame}
+
+
+\begin{frame}{Two-stage stochastic linear programs with recourse}
+
+\begin{center}
+\verm{The deterministic equivalent problem can be too large to be solved directly}
+\end{center}
+
+\begin{center}
+\shadowbox{We need to decompose the problem}
+\end{center}
+
+For convenience of notation, let's
+write the 2SLP more compactly as
+\[
+\left\{\begin{array}{ll}
+\displaystyle \min_{(x,y)\geq 0} & c^\top x+
+\E[q^\top y]\\
+ s.t. & Ax =  b \\&T x+Wy=h \;\;\; a.s.
+\end{array}\right.
+\]
+We define also the random vector
+\[
+\xi(\omega): = (q(\omega),h(\omega),T(\omega),W(\omega))
+\quad \mbox{or simply} \quad
+\azul{\xi: = (q,h,T,W)}
+\]
+and split the problem according to first and second-stage variables
+
+\end{frame}
+
+
+
+\begin{frame}{Two-stage decomposition}
+  \begin{block}{Value function}
+    For each pair \verm{$(x,\xi)$}, define the simple LP
+    \[Q(x,\xi):=\left\{ \begin{array}{rll}
+        \min & q^\top y &\\
+        \mbox{s.t.} & W y   =h-Tx&\\
+                    & y  \geq 0  &
+    \end{array} \right.\]
+  \end{block}
+The program 2SLP is equivalent to
+\[\left\{ \begin{array}{rll}
+\min & c^\top x +\E\left[Q(x,\xi)\right] &\\
+\mbox{s.t.} & Ax=b\,, \quad x\geq0\,,&
+\end{array} \right.\]
+
+\begin{itemize}
+\item For fixed $\tilde\xi$, when is $Q(\cdot,\tilde\xi)$ finite?
+\item What does $Q(x,\tilde\xi)=-\infty$ mean?
+\only<2>{ \verm{(no solution - depending on $\prob(\tilde \xi)$)}}
+\item What does $Q(x,\tilde\xi)=+\infty$ mean?
+\only<2>{\verm{(infeasibility!)}}
+\end{itemize}
+
+
+
+\end{frame}
+
+\begin{frame}{Well-posedness}
+  \begin{block}{Fixed recourse}
+    The two-stage problem has \emph{fixed} recourse if $W$ does
+    not depend on $\omega$.
+  \end{block}
+
+  \begin{block}{Complete recourse}
+    The two-stage problem has \emph{complete} recourse if the system
+    $W y = z$ has a solution for every $z$ (ensure feasibility for all $z := h - Tx$)
+  \end{block}
+
+  \begin{block}{Relatively complete recourse}
+    The two-stage problem has \emph{relatively complete} recourse
+    if for every $x$ in the set $\{ x \; : \; Ax = b \;, \; x \geq 0 \}$
+    and for every $\xi \in \Xi$ the feasible set is non-empty:
+    \begin{equation*}
+     Y(x, \xi) \neq \emptyset
+    \end{equation*}
+    with
+    \begin{equation*}
+      Y(x, \xi) = \{ y \; : \; Tx + Wy = h \;, \; y \geq 0 \}
+    \end{equation*}
+  \end{block}
+\end{frame}
+
+\begin{frame}{Properties of the value function}
+  The dual of the second-stage problem is
+  \begin{equation*}
+      \min_{u} \; u^\top (h - Tx) \quad \text{s.t.} \quad W^\top u \leq q
+  \end{equation*}
+
+  \begin{block}{Structure}
+    \begin{itemize}
+      \item The function $Q(\cdot, \xi)$ is convex.
+      \item If $\{u \; : \; W^\top u \leq q \}$
+        is non-empty and second-stage problem is feasible,\\
+        then $Q(\cdot, \xi)$ is \emph{polyhedral}.
+    \end{itemize}
+  \end{block}
+
+  \begin{block}{Dual reformulation}
+    Suppose $Y(x, \xi) \neq \emptyset$. Then
+    \begin{equation*}
+      Q(x, \xi) = \max_{u} \; u^\top (h - Tx) \quad \text{s.t.} \quad W^\top u \leq q
+    \end{equation*}
+  \end{block}
+
+  \begin{block}{Subdifferentiability}
+    Suppose for $(x, \xi)$ $Q(x, \xi) < +\infty$. Then $Q(\cdot, \xi)$ is subdifferentiable
+    at $x$, with
+    \begin{equation*}
+      \partial Q(x, \xi) = -T^\top \mathcal{D}(x, \xi) \quad
+      \text{where} \quad
+      \mathcal{D}(x, \xi) := \argmax_{u \in \Lambda(q)} u^\top (h - Tx)
+    \end{equation*}
+  \end{block}
+\end{frame}
+
+\begin{frame}{Two-stage program with finitely many scenarios}
+  Suppose we have a finite number of scenarios $\xi^1, \cdots, \xi^N$.
+  Let
+  \begin{equation*}
+    \phi(x) := \mathbb{E}\big[ Q(x, \xi) \big] = \sum_{i=1}^N p_i Q(x, \xi_i)
+  \end{equation*}
+  The two-stage program is equivalent to
+  \[
+    \left\{ \begin{array}{rll}
+        \min & c^\top x +\sum_{i=1}^N p_i Q(x,\xi_i) &\\
+  \mbox{s.t.} & Ax=b\,, \quad x\geq0\,,&
+  \end{array} \right.
+  \]
+
+  \begin{block}{Proposition}
+    Suppose there exists $x_0$ such that $\phi(x_0) < +\infty$.\\
+    Then $\phi(\cdot)$ is polyhedral, and for all $x \in \dom(\phi)$,
+    \begin{equation*}
+      \partial \phi(x) = \sum_{i=1}^N p_k \partial Q(x, \xi_i)
+    \end{equation*}
+  \end{block}
+\end{frame}
+
+
+
+%\begin{frame}{Two-stage decomposition}
+%
+%\begin{itemize}
+%\item In practice, we need to generate a sample of scenarios $\{\xi^1, \ldots, \xi^N\}$, with scenario probability $p_i$,  from the distribution of $\xi$ and approximate
+%\[
+%\E[Q(x,\xi)] \quad \mbox{ by }\quad \sum_{i=1}^N p_i Q(x,\xi^i)
+%\]
+%\pula
+%
+%\item Notice that $Q(x,\xi)$ (for a fixed $x \in {\tt dom} \,Q$) is a random variable as well
+%\pula
+%
+%\item  \azul{The strong law of large numbers} ensures that
+%
+%\[
+%\lim_{N \to \infty} \frac{1}{N}\sum_{i=1}^N Q(x,\xi^i) = \E[Q(x,\xi)]
+%\]
+%\verde{with probability 1 - w.p.1}
+%
+%\pula
+%
+%\item This result justifies why we can replace $\E[Q(x,\xi)]$ with $\sum_{i=1}^N p_i Q(x,\xi^i)$: if your random scenario generator is good enough, just pick up a ``large enough" $N$ and set $p_i=1/N$
+%
+%\end{itemize}
+%\end{frame}

@@ -1,0 +1,163 @@
+
+%----------------
+
+\begin{frame}{Decomposition}
+  We aim at solving the two-stage program:
+  \[
+    \left\{ \begin{array}{rll}
+        \min & c^\top x +\sum_{i=1}^N p_i \verm{\only<1-2>{Q(x,\xi_i)}\only<3->{r_i}} &\\
+  \mbox{s.t.} & Ax=b\,, \quad x\geq0\,,&
+\only<3->{\\ & \verm{r_i \geq \alpha_k^i + \beta_k^i x} \quad \forall k=1, \cdots, V \quad \forall i=1,\cdots,k }
+  \end{array} \right.
+  \]
+  Reformulation:
+  \begin{itemize}
+    \item<2-> $\verm{Q(\cdot, \xi)}$ is polyhedral
+      \begin{equation*}
+        Q(x, \xi) = \max_{k=1,\cdots,V} \; \{ \beta_k x + \alpha_k \}
+      \end{equation*}
+    \item<3-> $\verm{Q(\cdot, \xi)}$ is convex
+      \begin{equation*}
+        \min_{x}\; Q(x, \xi) \quad \equiv\quad  \min_{x, r}\;  r \quad \text{s.t.} \quad r \geq \beta_k x + \alpha_k \quad \forall k=1, \cdots, V
+      \end{equation*}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Decomposition: multi-cut version}
+Given $x^k$, The Benders' decomposition computes a vertex by solving, for $i=1, \cdots, N$,
+\[
+  \text{\azul{(Lower problem)}}\quad  u_i^k\in\argmax_{u} \; (h_i- T_i x^k)^\top u  \quad \mbox{s.t.} \quad
+W_i^\top u \leq q_i
+\]
+and updates $(\xkk, r^{k+1})$ by solving the LP
+\[
+\text{\azul{(Upper problem)}}\quad
+\left\{
+\begin{array}{llll}
+  \displaystyle \min_{x,r_1, \cdots, r_N} &c^\top x + \sum_{i=1}^N p_i r_i \\
+\mbox{s.t.} & Ax = b \;, \; x\geq 0\\
+            & (h_i- T_i x)^\top u_i^\ell \leq r_i & i=1,\ldots,N \quad \forall \ell=1,\cdots, \verm{k}
+\end{array}
+\right.
+\]
+\end{frame}
+
+
+\begin{frame}{Decomposition: single-cut version}
+
+The Upper Problem
+\[
+\text{\azul{(Upper problem)}}\quad
+\left\{
+\begin{array}{llll}
+  \displaystyle \min_{x,r_1, \cdots, r_N} &c^\top x + \sum_{i=1}^N p_i r_i \\
+\mbox{s.t.} & Ax = b \;, \; x\geq 0\\
+            & (h_i- T_i x)^\top u_i^\ell \leq r_i & i=1,\ldots,N \quad \forall \ell=1,\cdots, \verm{k}
+\end{array}
+\right.
+\]
+is equivalent to
+\[
+ \left\{
+\begin{array}{llll}
+\displaystyle \min_{x,r} &c^\top x + r\\
+\mbox{s.t.} & Ax = b \;,\; x\geq 0\\
+             & \sum_{i=1}^N p_i({h_i}- {T_i}x)^\top u_i^\ell \leq r & \forall \ell=1,\ldots,\verm{k}
+\end{array}
+\right.
+\]
+with
+\[
+u_i^\ell \in\argmax_u \;({h_i}- {T_i}x^\ell)^\top {u}  \quad \mbox{s.t.} \quad
+{W_i}^\top u \leq q_i
+\]
+\end{frame}
+
+\begin{frame}{Decomposition}
+
+\verm{The Benders' decomposition applied to the LP}
+\[
+\left\{
+\begin{array}{lllllllllllll}
+\min & c^\top x &+ p_1q^{1\,\top} y^1  &+ p_2q^{2\,\top} y^2 &+ \cdots  &+ p_Nq^{N\,\top} y^N \\
+\mbox{s.t}& Ax =b\\
+&\\
+& T^1x           &+ W^1y^1&&&&= h^1 \\
+& T^2x           &&+ W^2y^2&&&= h^2 \\
+& \vdots         &&&\ddots \\
+& T^Nx           &&&&+ W^Ny^N&= h^N \\
+&\\
+&(x, y)\geq 0
+\end{array}
+\right.
+\]
+\verm{is known as the {\bf L-Shaped method}}
+\end{frame}
+
+\begin{frame}{Benders' decomposition for 2SLP}
+
+\begin{block}{The L-Shaped Method}
+Given $x^1$ feasible, set $k=1$ and  $UB^0=+\infty$
+\begin{enumerate}
+\item Send $\xk$ to the Lower Problems: \verm{for $i=1,\ldots,N$, compute a new vertex $u_i^k$ by solving}
+\[
+\text{\azul{(Lower Problem)}}\quad
+Q(\verm{\xk}, \xi_i)=\left\{
+\begin{array}{llll}
+\displaystyle \max_{u} &(h_i- T_i\verm{\xk})^\top u\\
+\mbox{s.t.} & W_i^\top u \leq q_i
+\end{array}
+\right.
+\]
+Set $\mathbf{Q}(\xk) = \sum_{i=1}^N p_s Q(\xk, \xi_i)$ and  $UB^k=\min\{UB^{k-1},c^\top \xk +\mathbf{Q}(\xk)\}$
+\only<2>{
+   and
+\[\mbox{\verm{$\beta^{k} = -\sum_{i=1}^N p_i[ T_i^\top u_i^k ]$ and $\alpha^{k}= \sum_{i=1}^N p_i[h_i^\top u_i^k ]$}}
+\]
+}
+
+\item Find $\verm{(\xkk, r^{k+1})}$ by solving the LP
+\[
+\text{\azul{(Upper problem)}}\quad
+\left\{
+\begin{array}{llll}
+\displaystyle \min_{x,r} &c^\top x + r\\
+\mbox{s.t.} & Ax = b \; , \; x \geq 0 \\
+\only<1>{& \sum_{s=1}^Np_s({h^s}- {T^s}x)^\top {u^{i,s}} \leq r& i=1,\ldots,\verm{k}}
+\only<2>{&\verm{ \beta^{i\, \top}}x + \verm{\alpha^i} \leq r& i=1,\ldots,k}
+\end{array}
+\right.
+\]
+
+\item If $UB^k - [c^\top x^{k+1}+r^{k+1}]\leq \tol$, stop
+
+\item Set \azul{$k=k+1$} and go back Step 1
+\end{enumerate}
+\end{block}
+
+\verde{The algorithm stops after finitely many steps (even if $\tol=0$) at the solution without enumerating all the vertices}
+
+\end{frame}
+
+
+%}\fi
+%----------------
+
+
+
+%\begin{frame}{Computational practice}
+%
+%\begin{block}{Exercise}
+%
+%
+%Solve the deterministic and stochastic versions of the
+%problem at the link
+%
+%\url{https://colab.research.google.com/drive/1mJGxrpmOPnG8cJMlNPxULxj-vUsOg6ql?usp=share_link}
+%
+%\end{block}
+%\end{frame}
+
+
+

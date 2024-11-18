@@ -1,0 +1,444 @@
+\begin{frame}{Stochastic programs with recourse} 
+Let's consider SP of the form
+\[
+\min_{x \in X}\, \E[f(x,\omega)] 
+\]
+where
+\begin{itemize}
+\item $f:\Re^n\times \Omega \to \Re$ is convex on $x$ (decision variable)
+\item $X \subset \R^n$ is a deterministic set (e.g. a fixed polyhedron)
+\item $\omega$ is a random vector and $(\Omega,\mathcal{F},P)$ is its probability space
+\item $\E[\cdot]$ is the expected value w.r.t. the probability measure $P$
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Representation of the uncertainties}
+\begin{block}{Continuous probability distribution}
+\begin{itemize}
+\item Sample space  $\Omega$ contains infinitely many elements
+\[
+\min_{x \in X}\, \E[f(x,\omega)]
+\]
+
+\item  For computational reasons, it is necessary to  consider finitely many scenarios $\omega^i \in \Omega$, with associated probability $p_i>0$
+\pula
+
+\item Resulting problem
+\[ 
+\min_{x \in X}\, f^N(x)\quad \mbox{with}\quad f^N(x):=\sum_{i=1}^{N}p_if(x,\omega^i)
+\]
+\end{itemize}
+\end{block}
+\begin{block}{Sample Average Approximation - SAA}
+\[
+\min_{x \in X}\, \frac{1}{N}\sum_{i=1}^{N}f(x,\omega^i)
+\]
+\end{block}
+ \end{frame}
+ 
+ 
+ 
+ 
+\begin{frame}
+\begin{block}{How to proceed when we do not know $P$?}
+\begin{itemize}
+\item In many applications the probability distribution is not precisely known
+\pula
+
+\item In these cases, $ P $ is estimated by using the historical of the stochastic vector
+\pula
+
+\item Scenario generation can be done via Monte Carlo simulation (it is advisable not to use
+the historical as scenarios)
+\end{itemize}
+\pula
+\end{block}
+\begin{block}{Representation of the uncertainties}
+\begin{center}
+\includegraphics[width=5cm]{../Figs/formatos.pdf} {}
+\end{center}
+\end{block} 
+\end{frame}
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+
+ 
+ 
+\begin{frame}{Evaluating a candidate solution }
+
+The point $\hat x^N$ solution  of
+\[
+(SAA)\quad \hat f^N=\min_{x \in X} f^N(x)\quad \mbox{with}\quad f^N(x)=\frac{\sum_{i=1}^N f(x,\omega^i)}{N}
+\]
+is a candidate solution to the ``true" problem
+\[
+f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\E[f(x,\omega)] 
+\]
+\pula
+
+As the feasible set of both problems are the same, we get \azul{${f}(\hat x^N)\geq f^*$}
+
+\pula
+We thus have the following \verm{unknown} optimality gap
+\[
+{\tt gap} (\hat x)=f(\hat x^N)- f^*\geq 0
+\]
+
+\azul{In what follows we are going to find an estimator $\hat{{\tt gap}}(\hat x^N) $ for ${\tt gap} (\hat x^N)$}
+ \end{frame}
+ 
+ 
+\begin{frame}{An upper bound (confidential interval) for ${\tt gap}(\hat x^N)$}
+\begin{itemize}
+\item Generate randomly, from the probability distribution of $\omega$, a (iid) sample with $N$ scenarios 
+\pula
+\item Obtain  $\hat x^N$ a solution of the resulting SAA problem
+\pula
+\item Generate randomly, from the probability distribution of $\omega$, another (iid) sample with $N'>>N$ scenarios 
+\pula
+\item Compute $f^{N'}(\hat x^N)= \frac{1}{N'}\sum_{i=1}^{N'} f(\hat x^N,\omega^i)$
+\pula
+\item Compute the variance of $f^{N'}(\hat x)$
+\[
+\hat \sigma_{N'}^2(\hat x^N):=\frac{1}{N'(N'-1)}\sum_{i=1}^{N'} [f(\hat x^N,\omega^i)-f^{N'}(\hat x^N)]^2
+\]
+\item Compute the upper bound for the  $100(1-\alpha)$-confidential interval of $f(\hat x^N)$:
+\azul{
+\[
+U_{N}'(\hat x^N):= f^{N'}(\hat x^N) + z_{\alpha}\hat \sigma_{N'}(\hat x^N)\,,
+\]
+}
+where $z_\alpha=\Phi^{-1}(1-\alpha)$ and $\Phi(z)$ is standard normal distribution. Ex: if $\alpha =5\%$, then $z_\alpha\approx 1.64$.
+\end{itemize}
+\end{frame} 
+
+\begin{frame}{ }
+\begin{itemize}
+\item Before defining a lower bound for the confidential interval of  ${\tt gap} (\hat x^N)$, notice that, for every given $x \in X$
+\[
+f(x)=\E[f^N(x)]\geq \E[\min_{y \in X} f^N(y)]=\E[\hat f^N]
+\] 
+(\azul{because  $f^N(x)$ is an unbiased estimator of $f(x)$})
+\pula
+
+\item Hence, we get the following useful inequality 
+\[
+f^*\geq \E[\hat f^N]
+\]
+\pula
+\item \azul{We can estimate $\E[\hat f^N]$ by solving several SAA problems}
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{A lower bound (confidential interval) for ${\tt gap}(\hat x^N)$}
+\begin{itemize}
+\item Choose $M>0$, and randomly generate $M$ samples of size  $N$
+\pula
+\item Solve $M$ problems SAA to obtain $\hat f^N_i$, $i=1,\ldots, M$
+\pula
+\item Compute the unbiased estimator of $\E[\hat f^N]$:
+\[
+\bar f^{N,M} :=\frac 1 M \sum_{i=1}^M \hat f^N_i
+\]
+\pula
+\item Compute the variance of $\bar f^{N,M}$:
+\[
+\hat \sigma^2_{N,M}:=\frac{1}{M(M-1)}\sum_{i=1}^M[\hat f^{N}_i - \bar f^{N,M} ]^2
+\]
+\pula
+\item Compute the lower bound for the $100(1-\alpha)$-confidential interval  of $\E[\hat f^N]$:
+% ${\tt gap}(\hat x^N)$:
+\azul{\[
+L_N':= \bar f^{N,M} - t_{\alpha,\nu}\hat \sigma_{N,M}\,,
+\]
+}
+where $\nu=M-1$ and $t_{\alpha,s}$ is the critical value of the Student's $t$-distribution with $\nu$ degrees of freedom 
+\end{itemize}
+\end{frame}
+%
+\begin{frame}{Evaluating a candidate solution}
+Given $ \hat x^N \in X $, solution of a SAA problem, we wish to estimate the optimality gap
+\azul{
+\[
+{\tt gap} (\hat x^N) = f (\hat x^N) -f^* \geq 0
+\]
+}
+\begin{block}{Upper bound}
+In order to calculate a statistical upper bound  $ U_{N '} (\hat x^N) $ for $ {\tt gap} (\hat x^N) $  we ``only" need to evaluate $ f^{N'}( x^N) $ and calculate its variance
+\azul{
+\[
+U_{N}'(\hat x^N):= f^{N'}(\hat x^N) + z_{\alpha}\hat \sigma_{N'}(\hat x^N)
+\]
+}
+\end{block}
+\pause
+\begin{block}{Lower bound}
+In order to calculate a statistical lower bound $ L_{N, M}$ to $\E[\hat f^N]$ we need to solve $ M $ SAA problems
+and calculate its average and variance
+\azul{\[
+L_N':= \bar f^{N,M} - t_{\alpha,\nu}\hat \sigma_{N,M}
+\]
+}
+\end{block}
+\end{frame}
+
+
+\begin{frame}{Evaluating a candidate solution}
+\[
+{\tt gap}(\hat x^N) = f(\hat x^N)-f^*\geq 0
+\]
+
+\begin{itemize}
+\item We have that
+$
+\hat{{\tt gap}}(\hat x^N):= U_{N'}(\hat x) - L_{N,M}\geq 0
+$. Then,
+\[
+\azul{[0,\,\hat{{\tt gap}}(\hat x^N)]}
+\]
+is a $(1-2\alpha)$-confidence interval for the optimality gap  ${\tt gap} (\hat x^N)$
+
+\pula
+\item If the estimator $\hat{{\tt gap}}(\hat x^N):= U_{N'}(\hat x) - L_{N,M}$ is small enough, so is the optimality gap  ${\tt gap}(\hat x^N)$
+\pula
+\item Hence, we can say that $\hat x^N$ is a good candidate for solving the true problem
+\[
+f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\int_{\omega \in \Omega} f(x,\omega)dP(\omega) 
+\]
+\end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{The KS-test}{Kolmogorov-Smirnov test}
+\[
+\hat x^N \in \arg \min_{x \in X} f^N(x), \quad \quad f^N(x)=\frac{\sum_{i=1}^N f(x,\omega^i)}{N}\quad (SAA)
+\]
+
+\begin{itemize}
+\item In order to infer if the sample size $N$  is satisfactory we may compare
+\pula
+\begin{itemize}
+\item $f^N(\hat x^N)$ with $f^{N'}(\hat x^N)$   (average of the individual costs $f(\hat x^N, \tilde \omega^j)$)
+\pula
+
+\item Empirical distribution of the individual costs  $f(\hat x^N, \tilde \omega^j),\;\;j=1,\ldots,N'$ and $f(\hat x^N,\omega^i),\;\;i=1,\ldots,N$ (KS-test)
+\end{itemize}
+\end{itemize}
+
+\begin{center}
+\includegraphics[width=5cm]{../Figs/KSteste.png} {}
+\end{center}
+ \end{frame} 
+ 
+\begin{frame}{The KS-test}
+
+Another idea widely used in practice is:
+\begin {itemize}
+\item Given $ N $ and $ M $, generate $ M $  samples of size $ N $ and solve $ M $ problems $ SAA $
+\pula
+
+\item Compare the most important variables of the $ M $  SAA solutions $ \hat x^N_i$, $ i = 1, \ldots, M$
+\pula
+
+\item Evaluate the SAA solutions using a larger sample $\{ \tilde \omega^1, \ldots, \tilde \omega^{N'} \}$
+\pula
+
+\item Compare the empirical cost distributions
+\end{itemize}
+\pula
+
+\azul{If there is a certain ``adherence" among the results, the size $ N $ can be considered satisfactory. Otherwise, it is suggested to increase $ N $}
+
+\pula
+\verde{Importance of simulation}
+\begin{itemize}
+\item It allows  us to analyze the quality of solution obtained with the stochastic model
+\pula
+
+\item it allows us to estimate an appropriated sample size
+\end{itemize}
+\end{frame} 
+
+\begin{frame}{Computational practice}
+Consider the following 2-SLP\[
+ \min_{x \in  X}\,f(x)\quad\mbox{com}\quad f(x):=c^\top  x + \E[Q(x, \xi)]\; \mbox{ with}
+\]
+\[
+ Q(x, \verm{\xi}):=\min_{y} q^{\top}  y \quad \mbox{s.a} \quad Tx + Wy =\verm{\xi},\;\; y\geq 0
+\]
+
+In this example, $x,y \in \Re^{60}$, $T,W \in \Re^{40\times 60}$ and $X=\{x\geq0: Ax=b\}$ with $b \in \Re^{30}$
+\pula
+
+The random vector $\xi=h(\omega)$ follows a multivariate probability distribution
+\pula
+
+The problem's data and scenarios are available at the link \url{www.oliveira.mat.br/teaching}
+\pula
+
+A line of the file {\tt Sample1.csv}  = a scenario $\xi^i$  (first line = first scenario)
+
+\pula Solve the Equivalent deterministic for $N = 5, 10, 1\,000$ and $10\,000$  
+%\pula The SAA approximation of this problem is
+%\[
+% \min_{x \in  X}\,c^\top  x + \frac {1}{N}\sum_{i=1}^NQ(x, \xi^i)
+%\]
+\end{frame}
+
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
+
+\begin{itemize}
+\item Lower bound: 628.744 
+
+\item SAA value:  661.549 
+
+\item Simulated value:  705.676 
+
+\item Upper bound:  711.364 
+\end{itemize}
+
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap5a}  
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
+
+\begin{itemize}
+\item Lower bound: 620.804  
+
+\item SAA value:  669.281 
+
+\item Simulated value:  728.717  
+
+\item Upper bound:  734.633 
+\end{itemize}
+
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap5b}  
+\end{frame}
+
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M5a} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M5b} 
+\end{frame}
+
+
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks5a} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks5b} 
+\end{frame}
+
+
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol5a} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol5b} 
+\end{frame}
+
+%--------------------
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
+
+\begin{itemize}
+\item Lower bound: 693.909  
+
+\item SAA value:  693.871 
+
+\item Simulated value:  693.746
+
+\item Upper bound:  698.871 
+\end{itemize}
+
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap100a}  
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
+
+\begin{itemize}
+\item Lower bound: 695.389  
+
+\item SAA value:  693.353 
+
+\item Simulated value:  695.700  
+
+\item Upper bound:  701.052 
+\end{itemize}
+
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap100b}  
+\end{frame}
+
+\begin{frame}{A numerical example}
+This means that the optimal value of
+\[
+ \min_{x \in  X}\,f(x)\,,\quad\mbox{with}\quad f(x):=c^\top  x + \E[Q(x, \xi)],\; 
+\]
+is withing the interval
+\[
+[695.389, \; 701.052]
+\]
+with 90\% of confidence
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M100a} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M100b} 
+\end{frame}
+
+
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks100a} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks100b} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol100a} 
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol100b} 
+\end{frame}

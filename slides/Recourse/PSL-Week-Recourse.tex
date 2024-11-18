@@ -1,0 +1,246 @@
+\documentclass[slidstop,compress,8pt]{beamer}
+\usepackage{babel}
+\usepackage{marvosym,subfig}
+\usepackage{animate}
+\usepackage{algorithm2e}
+\usepackage{graphics,color,graphics,fancybox,ragged2e,dingbat}
+\usepackage{tikz}
+\usepackage{float}
+\usetikzlibrary{trees}
+\useoutertheme[]{default}
+\usecolortheme{orchid}%{dolphin} %%colore tema
+%\usecolortheme[rgb={.00,.52,.30}]{structure}
+%\usecolortheme[rgb={.0,.5,.2}]{structure}
+\usefonttheme[sefif,onlymath]{serif} %%font
+\usefonttheme[]{structuresmallcapsserif} %%,structurebold
+\usetheme{default}
+
+
+\setbeamercolor*{title}{use=structure,fg=white,bg=structure.fg}
+\setbeamertemplate{title page}[default][colsep=-4bp,rounded=true,shadow=true]
+
+\definecolor{bluescuro}{RGB}{10,50,190}
+\definecolor{celestino}{RGB}{193,210,243}
+\definecolor{mygreen}{rgb}{0.,0.5,0.1}
+\setbeamercolor{alerted text}{fg=bluescuro}
+
+
+%====================================================
+\newcommand{\vAS}{[vAckoSag14]}%\cite{vanAckooij_Sagastizabal_2012}\/}
+\newcommand{\vAO}{LBM\/}
+\newcommand{\SupHyp}{[Prek03]}%{Alg.\cite{Prekopa_2003}\/}
+\newcommand{\FeasDir}{[Prek70]}%{Alg.\cite{Prekopa_1970}\/}
+\newcommand{\BunCen}{[Kiw08]}%{Alg.\cite{Kiwiel_2008}\/}
+\newcommand{\PrimDual}{[LNN95]}%{Alg.\cite{Lemarechal_Nemirovskii_Nesterov_1995}\/}
+
+
+\def\argmax{\mathop{\rm arg\,max}}
+\def\argmin{\mathop{\rm arg\,min}}
+\DeclareMathOperator{\dom}{dom}
+\DeclareMathOperator{\llev}{lev}
+\DeclareMathOperator{\llow}{low}
+\DeclareMathOperator{\uup}{up}
+\DeclareMathOperator{\lc}{c}
+\DeclareMathOperator{\lf}{f}
+\DeclareMathOperator{\tar}{tar}
+\DeclareMathOperator{\rec}{rec}
+%\DeclareMathOperator{\tol}{tol}
+\newcommand{\tol}{\delta_{\texttt{Tol}}}
+%\newcommand{\eps}{\epsilon}
+\newcommand{\Q}{\mathcal{Q}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\cvar}{\texttt{AV@R}_\beta}
+\newcommand{\inner}[2]{\langle#1,#2\rangle}
+\newcommand{\flin}{{\bar{f}}}
+\newcommand{\clin}{{\bar{c}}}
+\newcommand{\x}{x}
+\newcommand{\X}{X}
+\newcommand{\Xlev}{\mathbb{X}}
+\newcommand{\dsum}{\displaystyle\sum}
+\newcommand{\xkk}{{\x^{k+1}}}
+\newcommand{\xk}{{\x^{k}}}
+\newcommand{\xc}{{\hat{\x}}}
+\newcommand{\xr}{\x_{\rec}}
+\newcommand{\xrk}{\xr^k}
+\newcommand{\xck}{{\xc^k}}
+\newcommand{\xckk}{{\xc^{k+1}}}
+\newcommand{\fbun}{J_{\lf}}
+\newcommand{\cbun}{J_{\lc}}
+\newcommand{\fmodel}{\check{f}}
+\newcommand{\cmodel}{\check{c}}
+%\newcommand{\flow}{f_{\llow}}
+%\newcommand{\flev}{f_{\llev}}
+\newcommand{\kapl}{\gamma}
+\newcommand{\finf}{f_{\min}}
+\newcommand{\xinf}{\x_{\min}}
+\newcommand{\nn}{\nonumber}
+\newcommand{\gf}{g_{\lf}}
+\newcommand{\gc}{g_{\lc}}
+\newcommand{\agf}{\hat{g}_{\lf}}
+\newcommand{\agc}{\hat{g}_{\lc}}
+\newcommand{\pf}{\mu_{\lf}}
+\newcommand{\pc}{\mu_{\lc}}
+\newcommand{\R}{\Re}
+\newcommand{\itef}{{a_{\lf}}}
+\newcommand{\itec}{{a_{\lc}}}
+\newcommand{\ite}{a}
+\newcommand{\ferror}{\eta_{\lf}}
+\newcommand{\cerror}{\eta_{\lc}}
+\newcommand{\ferrorg}{\epsilon_{\lf}}
+\newcommand{\cerrorg}{\epsilon_{\lc}}
+\newcommand{\error}{\eta}
+\newcommand{\ftar}{f_{\tar}}
+\newcommand{\ctar}{c_{\tar}}
+\newcommand{\fl}{{w}}
+\newcommand{\pp}{{\texttt{t}}}
+\newcommand{\f}{{\check{f}}}
+\newcommand{\nred}{{N_{\texttt{rep}}}}
+\newcommand{\Ilp}{{I_{\texttt{rep}}}}
+\newcommand{\pula}{\vspace{.1in}}
+\newcommand{\azul}[1]{{\color{blue}#1}}
+\newcommand{\verde}[1]{{\color{mygreen}#1}}
+\newcommand{\verm}[1]{{\color{red}#1}}
+\newcommand{\var}{\mathbb{V}\texttt{ar}}
+\newcommand{\cov}{\mathbb{C}\texttt{ov}}
+\newcommand{\corr}{\mathbb{C}\texttt{orr}}
+\newcommand{\prob}{\mathbb{P}}
+\newcommand{\flow}{f^{\llow}}
+\newcommand{\fup}{f^{\uup}}
+
+\newcommand{\norm}[1]{\ensuremath{\Arrowvert #1 \Arrowvert}}
+\definecolor{mygreen}{rgb}{0.,0.5,0.1}
+\def\vert#1{{\color{mygreen}#1}}
+
+\newenvironment{retraitsimple}{\begin{list}{--~}{
+ \topsep=0.3ex \itemsep=0.3ex \labelsep=0em \parsep=0em
+ \listparindent=1em \itemindent=0em
+ \settowidth{\labelwidth}{--~} \leftmargin=\labelwidth
+}}{\end{list}}
+
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/coverlight}}
+\setbeamertemplate{footline}[frame number]
+
+
+
+%======================================================================================
+\title{Stochastic Programming \newline {\small Stochastic programming with recourse}}
+
+\author{{\bf Fran\c{c}ois Pacaud  and Welington de Oliveira} \\
+{\scriptsize \texttt{frapac.github.io}}
+}
+\institute{\bf Centre Automatique et Systèmes - CAS \\
+\'Ecole Nationale Sup\'erieure des Mines de Paris - Mines Paris PSL %\\
+}
+% CMA - MINES Paris PSL}
+%\logo{\includegraphics[width=1.2cm]{../Figs/logo}}
+\titlegraphic{\includegraphics[width=5cm]{../Figs/LogoMinesPSL}}
+
+
+
+\date{C1MINES-09 PSL week: Optimisation Stochastique, November 2024}
+
+\begin{document}
+\frame[noframenumbering,plain]{\titlepage}
+
+
+
+\begin{frame}[noframenumbering,plain]{Outline}
+\tableofcontents %[pausesections]
+\end{frame}
+
+%---------------------------------------------------------------------
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/white}}
+
+
+
+
+%
+%---------------------------------------------------------------------
+\section{SP with recourse: Two-stage Linear Programming - 2SLP}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/coverlight}}
+\begin{frame}[noframenumbering,plain]{ }
+\begin{block}{\Large Two-stage Linear Programming - 2SLP}
+\end{block}
+\end{frame}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/white}}
+\input{Recourse}
+%
+
+\section{SP with recourse: The L-Shaped Method}
+%---------------------------------------------------------------------
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/coverlight}}
+\begin{frame}[noframenumbering,plain]{ }
+\begin{center}
+\shadowbox{The L-Shaped Method}
+\end{center}
+\end{frame}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/white}}
+%\input{Benders}
+\input{LShaped-viaBenders}
+%
+%%---------------------------------------------------------------------
+\section{SP with recourse: Multistage Linear Programming - MSLP}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/coverlight}}
+\begin{frame}[noframenumbering,plain]{ }
+\begin{block}{\Large Multistage Stochastic Linear Programming - MSLP}
+\end{block}
+\end{frame}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/white}}
+\input{MSLP}
+
+
+%---------------------------------------------------------------------
+\section{SP with recourse: Sample Average Approximation - SAA}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/coverlight}}
+\begin{frame}[noframenumbering,plain]{ }
+\begin{block}{\Large SP with recourse}
+ Sample Average Approximation - SAA
+\end{block}
+\end{frame}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/white}}
+\input{SAA}
+
+%---------------------------------------------------------------------
+\section{SP with recourse: Estimating optimality gap}
+
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/coverlight}}
+\begin{frame}[noframenumbering,plain]{ }
+\begin{block}{\Large Estimating optimality gap}
+\end{block}
+\end{frame}
+\usebackgroundtemplate{\includegraphics[width=\paperwidth]{../Figs/white}}
+\input{GAP}
+%
+
+\begin{frame}{Further references}
+  \begin{itemize}
+    \item Shapiro, A., Dentcheva, D., \& Ruszczynski, A. (2021).\\
+      \emph{Lectures on stochastic programming: modeling and theory.}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}[noframenumbering,plain]{ }
+%\begin{center}
+%\large
+%\ovalbox{Thank you very much!}
+%\end{center}
+\pula
+
+\begin{block}{Contact}
+\begin{itemize}
+\item [\Letter] \url{ welington.oliveira@mines-paristech.fr}
+\item [\Keyboard] \url{www.oliveira.mat.br}
+\end{itemize}
+\end{block}
+\pula
+
+
+\begin{center}
+\includegraphics[width=8cm]{../Figs/LogoPSL}
+\end{center}
+\end{frame}
+
+\end{document}
+
