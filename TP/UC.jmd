@@ -1,0 +1,412 @@
+---
+title : Electrical Power Generation Problem - UC
+author : Welington de Oliveira
+date : November, 25th 2024
+---
+
+## Objective and Prerequisites
+
+This model is an example of an electrical power generation problem (also known as a unit commitment problem). It selects an optimal set of power stations to turn on in order to satisfy anticipated power demand over a 24-hour time horizon.  This example is modified by W. de Oliveira (www.oliveira.mat.br). The goal is to extend the basic model to a stochastic setting, using a probability constraint.
+
+The basic model is example 16 from the fifth edition of Model Building in Mathematical Programming, by H. Paul Williams on pages 271-272 and 326-327.
+
+The following project is implemented in Julia, using the optimization modeler JuMP.
+- If you are new to the Julia language, we recommend the [following introduction](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_julia/).
+- If you are new to optimization modeler, we recommend the [following tutorial](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_JuMP/).
+
+
+---
+## Problem Description
+
+In this problem, thermal power generation units are grouped into three distinct types, with different characteristics for each type (power output, cost per megawatt hour, startup cost, etc.).  A unit can be on or off, with a startup cost associated with transitioning from off to on, and power output that can fall anywhere between a specified minimum and maximum value when the unit is on.  There are also two hydroelectric plants available, also with different cost and power generation characteristics.  A 24-hour time horizon is divided into 5 discrete time periods. Except for the first period, which is assumed detetministic,  total power demand is random. Given a possible realization of the random vector of power demand, the basic model decides which units to turn on, and when, in order to satisfy the *given demand* for each time period.  The model also captures a reserve requirement, where the selected power plants must be capable of increasing their output, while still respecting their maximum output, in order to cope with the situation where actual demand exceeds predicted demand.
+
+A set of generators is available to satisfy power demand for the following day.  The average demand is as follows:
+
+| Time Period | Avg Demand (megawatts) |
+| --- | --- |
+| 12 pm to 6 am | 15000 |
+| 6 am to 9 am | 30000 |
+| 9 am to 3 pm | 25000 |
+| 3 pm to 6 pm | 40000 |
+| 6 pm to 12 pm | 27000 |
+
+Thermal generators are grouped into three types, with the following minimum and maximum output for each type (when they are on):
+
+| Type | Number available | Minimum output (MW) | Maximum output (MW) |
+| --- | --- | --- | --- |
+| 0 | 12 |  850 | 2000 |
+| 1 | 10 | 1250 | 1750 |
+| 2 | 5 | 1500 | 4000 |
+
+There are costs associated with using a thermal generator: a cost per hour when the generator is on (and generating its minimum output), a cost per megawatt hour above its minimum, and a startup cost for turning a generator on:
+
+| Type | Cost per hour (when on) | Cost per MWh above minimum | Startup cost |
+| --- | --- | --- | --- |
+| 0 | ``\$1000`` | ``\$2.00`` | ``\$2000`` |
+| 1 | ``\$2600`` | ``\$1.30`` | ``\$1000`` |
+| 2 | ``\$3000`` | ``\$3.00`` | ``\$500`` |
+
+Two hydroelectric generators are also available, each with a fixed power output (when on):
+
+| Hydro plant | Output (MW) |
+| --- | --- |
+| A | 900 |
+| B | 1400 |
+
+The costs associated with using a hydro plant are slightly different.  There's an hourly cost, but it is much smaller than the hourly cost of a thermal generator.  The real cost for a hydroelectric plant comes from depletion of the water in the reservoir, which happens at different rates for the two units.  The reservoir must be replenished before the end of the time horizon by pumping water into it, which consumes electricity.  A hydroelectric plant also has a startup cost.
+
+| Hydro plant | Cost per hour (when on) | Startup cost | Reservoir depth reduction (m/hr) |
+| --- | --- | --- | --- |
+| A | ``\$90`` | ``\$1500`` | 0.31 |
+| B | ``\$150`` | ``\$1200`` | 0.47 |
+
+Pumping water into the reservoir consumes electricity at a rate of 3000 MWh of electricity per meter of height.  The height of the reservoir at the end of the time horizon must be equal to the height at the beginning.
+
+
+---
+## Model Formulation: Desterministic Setting
+Given a scenario demand, i.e., a possible realization of the future random demand, the question we wish to answer is:
+which generators should be committed to meet anticipated demand in order to minimize total cost?
+
+### Sets and Indices
+
+- ``t \in \text{Types}=\{0,1,2\}``: Types of thermal generators.
+- ``h \in \text{HydroUnits}=\{0,1\}``: Two hydro generators.
+- ``p \in \text{Periods}=\{0,1,2,3,4\}``: Time periods.
+
+### Parameters
+
+- ``\text{period_hours}_{p} \in \mathbb{N}^+``: Number of hours in each time period.
+- ``\text{demand}_p \in \mathbb{R}^+``: Total power demand for time period ``p``.
+- ``\text{generators}_t \in \mathbb{N}^+``: Number of thermal generators of type ``t``.
+- ``\text{start0} \in \mathbb{N}^+``: Number of thermal generators that are on at the beginning of the time horizon (and available in time period 0 without paying a startup cost).
+- ``\text{min_output}_t \in \mathbb{R}^+``: Minimum output for thermal generator type ``t`` (when on).
+- ``\text{max_output}_t \in \mathbb{R}^+``: Maximum output for thermal generator type ``t``.
+- ``\text{base_cost}_t \in \mathbb{R}^+``: Minimum operating cost (per hour) for a thermal generator of type ``t``.
+- ``\text{per_mw_cost}_t \in \mathbb{R}^+``: Cost to generate one additional MW (per hour) for a thermal generator of type ``t``.
+- ``\text{startup_cost}_t \in \mathbb{R}^+``: Startup cost for thermal generator of type ``t``.
+- ``\text{hydro_load}_h \in \mathbb{R}^+``: Output for hydro generator ``h``.
+- ``\text{hydro_cost}_h \in \mathbb{R}^+``: Cost for operating hydro generator ``h``.
+- ``\text{hydro_startup_cost}_h \in \mathbb{R}^+``: Startup cost for hydro generator ``h``.
+- ``\text{hydro_height_reduction}_h \in \mathbb{R}^+``: Hourly reduction in reservoir height from operating hydro generator ``h``.
+
+### Decision Variables
+
+- ``\text{ngen}_{t,p} \in \mathbb{N}^+``: Number of thermal generators of type ``t`` that are on in time period ``p``.
+- ``\text{output}_{t,p} \in \mathbb{R}^+``: Total power output from thermal generators of type ``t`` in time period ``p``.
+- ``\text{nstart}_{t,p} \in \mathbb{N}^+``: Number of thermal generators of type ``t`` to start in time period ``p``.
+- ``\text{hydro}_{h,p} \in [0,1]``: Indicates whether hydro generators ``h`` is on in time period ``p``.
+- ``\text{hydro_start}_{h,p} \in [0,1]``: Indicates whether hydro generator ``h`` starts in time period ``p``.
+- ``\text{height}_{p} \in \mathbb{R}^+``: Height of reservoir in time period ``p``.
+- ``\text{pumping}_{p} \in \mathbb{R}^+``: Power used to replenish reservoir in time period ``p``.
+
+
+### Objective Function
+
+- **Cost**: Minimize the cost (in USD) to satisfy the predicted electricity demand.
+
+```math
+\text{Minimize} \quad Z_{on} + Z_{extra} + Z_{startup} + Z_{hydro} + Z_{hydro\_startup}
+```
+
+```math
+Z_{on} = \sum_{(t,p) \in \text{Types} \times \text{Periods}}{\text{base_cost}_t*\text{ngen}_{t,p}}
+```
+```math
+Z_{extra} = \sum_{(t,p) \in \text{Types} \times \text{Periods}}{\text{per_mw_cost}_t*(\text{output}_{t,p} - \text{min_load}_t})
+```
+```math
+Z_{startup} = \sum_{(t,p) \in \text{Types} \times \text{Periods}}{\text{startup_cost}_t*\text{nstart}_{t,p}}
+```
+```math
+Z_{hydro} = \sum_{(h,p) \in \text{HydroUnits} \times \text{Periods}}{\text{hydro_cost}_h*\text{hydro}_{h,p}}
+```
+```math
+Z_{hydro\_startup} = \sum_{(h,p) \in \text{HydroUnits} \times \text{Periods}}{\text{hydro_startup_cost}_h*\text{hydro_start}_{h,p}}
+```
+
+
+### Constraints
+
+- **Available generators** (SetCons \#1): Number of generators used must be less than or equal to the number available.
+
+```math
+\text{ngen}_{t,p} \leq \text{generators}_t  \quad \forall (t,p) \in \text{Types} \times \text{Periods}
+```
+
+- **Min/max generation** (SetCons \#2): Power generation must respect thermal generator min/max values.
+
+```math
+\text{output}_{t,p} \geq \text{min_output}_t*\text{ngen}_{t,p} \quad \forall (t,p) \in \text{Types} \times \text{Periods}
+```
+
+```math
+\text{output}_{t,p} \leq \text{max_output}_t*\text{ngen}_{t,p} \quad \forall (t,p) \in \text{Types} \times \text{Periods}
+```
+
+
+- **Thermal startup** (SetCons \#3): Establish relationship between number of active thermal generators and number of startups (use $start0$ for period before the time horizon starts)
+
+```math
+\text{ngen}_{t,p} \leq \text{ngen}_{t,p-1} + \text{nstart}_{t,p} \quad \forall (t,p) \in \text{Types} \times \text{Periods}
+```
+
+- **Hydro startup** (SetCons \#4): Establish relationship between hydro generator state and number of hydro startups (assume hydro plants are off at the beginning of the horizon)
+
+```math
+\text{hydro}_{h,p} \leq \text{hydro}_{h,p-1} + \text{hydro_start}_{h,p} \quad \forall (h,p) \in \text{HydroUnits} \times \text{Periods}
+```
+
+- **Reservoir height** (SetCons \#5): Track reservoir height.   Note that the height at the end of the final time period must equal the height at the beginning of the first.
+
+- Reservoir level constraints: Height increases due to pumping activity and decreases due to hydroelectric generation.
+
+```math
+\text{height}_{p} = \text{height}_{p-1}  + \text{period_hours}_{p}*\text{pumping}_{p}/3000 -
+\sum_{h \in \text{HydroUnits}}{\text{period_hours}_{p}*\text{hydro_height_reduction}_{h}*\text{hydro}_{h,p}} \quad \forall p \in \text{Periods}
+```
+
+- Cyclic constraint: Height at the first period must be equal to height at the last period.
+
+```math
+\text{height}_{pfirst} = \text{height}_{plast}  + \text{period_hours}_{pfirst}*\text{pumping}_{pfirst}/3000 -
+\sum_{h \in \text{HydroUnits}}{\text{period_hours}_{pfirst}*\text{hydro_height_reduction}_{h}*\text{hydro}_{h,pfirst}}
+```
+
+
+- **Demand** (SetCons \#6): Total power generated across all generator types must meet the given demand scenario plus pumping for each time period $p$.
+
+```math
+\sum_{t \in \text{Types}}{\text{output}_{t,p}} +
+\sum_{h \in \text{HydroUnits}}{\text{hydro_load}_h*\text{hydro}_{h,p}} \geq
+\text{demand}_p + \text{pumping}_p \quad \forall p \in \text{Periods}
+```
+
+---
+
+## Jullia implementation
+
+```julia
+using JuMP
+using HiGHS
+using Plots
+
+```
+
+
+## Input Data
+We define all the input data of the model.
+
+```julia; results="hidden"
+# Parameters
+ntypes = 3
+nperiods = 5
+maxstart0 = 5
+hydrounits = 2
+Nscen      = 1000
+
+generators = [12, 10, 5]
+period_hours = [6, 3, 6, 3, 6]
+
+# Average of the random demand
+demand = [15000, 30000, 25000, 40000, 27000]
+
+min_load = [850, 1250, 1500]
+max_load = [2000, 1750, 4000]
+base_cost = [1000, 2600, 3000]
+per_mw_cost = [2, 1.3, 3]
+startup_cost = [2000, 1000, 500]
+
+hydro_load = [900, 1400]
+hydro_cost = [90, 150]
+hydro_height_reduction = [0.31, 0.47]
+hydro_startup_cost = [1500, 1200]
+
+```
+
+## Deterministic Model
+
+We create a model and the variables. For each time period, we have:
+- an integer decision variable to capture the number of active generators of each type (ngen),
+- an integer variable to capture the number of generators of each type we must start (nstart),
+- a continuous decision variable to capture the total power output for each generator type (output),
+- a binary decision variable that indicates whether a hydro unit is active (hydro),
+- a binary decision variable that indicates whether a hydro unit must be started (hydrstart),
+- a continuous decision variable that captures the amount of enery used to replenish the reservoir (pumping), and
+- a continuous decision variable that captures the height of the reservoir (height).
+
+```julia; results="hidden"
+model = Model(HiGHS.Optimizer)
+
+@variable(model, ngen[1:ntypes, 1:nperiods], Int)
+@variable(model, nstart[1:ntypes, 1:nperiods], Int)
+@variable(model, output[1:ntypes, 1:nperiods])
+
+@variable(model, hydro[1:hydrounits, 1:nperiods], Bin)
+@variable(model, hydrostart[1:hydrounits, 1:nperiods], Bin)
+@variable(model, pumping[1:nperiods])
+@variable(model, height[1:nperiods])
+
+```
+
+---
+### Objective
+Minimize total cost. Cost consists of five components: the cost for running active thermal generation units, the cost to generate power beyond the minimum for each unit, the cost to start up thermal generation units, the cost to operate hydro units, and the cost to start up hydro units.
+
+```julia; results="hidden"
+# Objective: minimize total cost
+@expression(model, active, sum(base_cost[type]*period_hours[period]*ngen[type,period] for type in 1:ntypes, period in 1:nperiods))
+@expression(model, per_mw, sum(per_mw_cost[type]*period_hours[period]*(output[type,period] - min_load[type]*ngen[type,period]) for type in 1:ntypes for period in 1:nperiods))
+@expression(model, startup_obj, sum(startup_cost[type]*nstart[type,period] for type in 1:ntypes for period in 1:nperiods))
+@expression(model, hydro_active, sum(hydro_cost[unit]*period_hours[period]*hydro[unit,period] for unit in 1:hydrounits for period in 1:nperiods))
+@expression(model, hydro_startup, sum(hydro_startup_cost[unit]*hydrostart[unit,period] for unit in 1:hydrounits for period in 1:nperiods))
+
+@objective(model, Min, active + per_mw + startup_obj + hydro_active + hydro_startup)
+
+```
+
+---
+### Constraints
+Next we insert the constraints:
+
+- SetCons \#1. The number of active generators can't exceed the number of generators:
+
+```julia; results="hidden"
+# Generator count
+@constraint(model, numgen[type=1:ntypes, period=1:nperiods], ngen[type, period] <= generators[type])
+```
+
+- SetCons \#2. Total power output for a thermal generator type depends on the number of generators of that type that are active.
+
+```julia; results="hidden"
+# Respect minimum and maximum output per generator type
+@constraint(model, min_output[type=1:ntypes, period=1:nperiods], output[type, period] >= min_load[type] * ngen[type, period])
+@constraint(model, max_output[type=1:ntypes, period=1:nperiods], output[type, period] <= max_load[type] * ngen[type, period])
+
+```
+
+- SetCons \#3. Connect the decision variables that capture active thermal generators with the decision variables that count startups.
+
+```julia; results="hidden"
+# Startup constraint
+@constraint(model, startup0[type=1:ntypes], ngen[type,1] <= maxstart0 + nstart[type,1])
+@constraint(model, startup[type=1:ntypes, period=2:nperiods], ngen[type,period] <= ngen[type,period-1] + nstart[type,period])
+
+```
+
+- SetCons \#4. Connect hydro decision variables with hydro startup decision variables.
+
+```julia; results="hidden"
+# Hydro startup constraint
+@constraint(model, hydro_startup0_cons[unit=1:hydrounits], hydro[unit,1] <= hydrostart[unit,1])
+@constraint(model, hydro_startup_cons[unit=1:hydrounits, period=2:nperiods], hydro[unit,period] <= hydro[unit,period-1] + hydrostart[unit,period])
+```
+
+- SetCons \#5. Maintain appropriate reservoir levels
+
+```julia; results="hidden"
+# Reservoir levels
+@constraint(
+    model,
+    reservoir[unit=1:hydrounits, period=2:nperiods],
+    height[period] == height[period-1] + period_hours[period]*pumping[period]/3000 -
+                    sum(hydro_height_reduction[unit]*period_hours[period]*hydro[unit,period] for unit in 1:hydrounits),
+)
+# cyclic - height at end must equal height at beginning
+@constraint(
+    model,
+    reservoir0,
+    height[1] == height[nperiods] + period_hours[1]*pumping[1]/3000 - sum(hydro_height_reduction[unit]*period_hours[1]*hydro[unit,1] for unit in 1:hydrounits)
+)
+```
+
+- SetCons \#6. Total generator output (thermal plus hydro) for each time period must meet the given demand scenario plus pumping.
+
+```julia; results="hidden"
+# Meet demand
+@constraint(
+    model,
+    meet_demand[period=1:nperiods],
+    sum(output[type, period] for type in 1:ntypes) +
+    sum(hydro_load[unit]*hydro[unit,period] for unit in 1:hydrounits) >=
+    demand[period] + pumping[period]
+)
+```
+
+---
+### Solving Deterministic Model
+Next, we start the optimization and HiGHS finds the optimal solution.
+
+```julia; line_width=200
+JuMP.optimize!(model)
+```
+
+Objective value:
+```julia
+JuMP.objective_value(model)
+
+```
+
+---
+## Stochastic Model
+In this section we consider a stochastic variant of the problem. We assume that the load demand is uncertain from the second period on, but follows a known probability distribution.
+
+The goal is to find an optimal set of power stations to turn on in order to satisfy the random power demand with a probability of at least $p_{level} \in [0,1]$.
+The constraints (SetCons #6) above is replace with
+
+- **Random Demand - continuous** (SetCons \#6'): Total power generated across all generator types must meet the random demand  plus pumping for each time period with probability $p_{level}$:
+
+```math
+\mathbb{P}\left[\sum_{t \in \text{Types}}{\text{output}_{t,p}} +
+\sum_{h \in \text{HydroUnits}}{\text{hydro_load}_h*\text{hydro}_{h,p}} \geq
+\textbf{ demand}_p + \text{pumping}_p \quad \forall p \in \text{Periods}\right] \geq  p_{level}
+```
+
+The uncertainties will be represented by $Nscen$ scenarios of demand, drawn from a
+ Gaussian probability distribution with average given by the vector *demand* above, and covariace matrix:
+ ```math
+ Cov = \left[
+  \begin{array}{llllllllll}
+   265000&      475000&      650000&      700000\\
+      475000&     1300000&      750000&     1650000\\
+      650000&      750000&     2500000&     2000000\\
+      700000&    1650000&     2000000&     4700000
+     \end{array}\right]
+```
+
+## Task 1
+Reformulate the above probability constraint by using ``Nscen`` scenarios ``\textbf{demand}_p^{i} \in R^5`` of demand, having probability ``Pr_i``, ``i=1,\ldots,N``.
+
+## Task 2
+Generate ``Nscen\geq 1`` correlated scenarios following the stated probability distribution. Set a seed for the random number generator: use
+np.random.seed(0).
+
+(Hint: Generated ``S \in R^{Nscen \times 4}`` from the standard normal distribution. Compute the Cholesky decomposition of ``Cov = C^\top C``. Set ``Scen = demand + S\cdot C``. Enlarge matrix ``Scen`` by adding the first column with all values equal to ``demand_1``.)
+
+## Task 3
+Using your code for Task 2, generate a sample of ``Nscen=300`` correlated scenarios. Assign the probability ``Pr_i=1/Nscen`` for every scenario.
+* a) Plot this sample.
+* b) What is the percentage of scenarios satisfied by the determinist solution?
+
+## Task 4
+Using the above sample, solve the resulting chance-constrained problem (Task 1) with probability level ``p_{level}=0.9``. Compare the following outputs with those from the deterministic model:
+* a) Costs
+* b) Thermal production
+* c) hydro production
+* d) Pumping
+
+What happens when reliability is increased to ``p_{level}=0.95``
+
+## Task 5 (Bonus)
+This task is optional.
+
+Generate a sample with $Nscen =1000$ scenarios. Pre-process this sample to reduce its size. Repeat Task 4 with this pre-processed sample.
+
+
+
+---
+## References
+
+H. Paul Williams, Model Building in Mathematical Programming, fifth edition.
+
+W. de Oliveira, Cours Mines 07 semaine PSL. Slides at www.oliveira.mat.br/teaching
