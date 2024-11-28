@@ -41,9 +41,7 @@ ylabel!("Energy price (€)")
 ```
 
 ---
-**Question 1:** Comment the evolution of the price. What is the average
-energy price? Compare with (i) the price to produce 1MWh using nuclear energy
-(ii) the price paid by the consumer.
+**Question 1:** Comment the evolution of the price. What is the average energy price? Compare with (i) the price to produce 1MWh using nuclear energy (ii) the price paid by the final consumer in France.
 
 ---
 
@@ -52,16 +50,16 @@ Before looking at a stochastic model for the energy price, we analyze the
 deterministic solution.
 We start by writing a mathematical model for our energy storage. We introduce
 the following parameters:
-- ``C``: battery capacity [MWh]
-- ``P``: maximum battery charge/discharge in one hour [MWh]
-- ``η_p``: charge efficiency
-- ``η_d``: discharge efficiency
-- ``c``: tax paid when injecting energy onto the network [€/MWh]
+- ``C > 0``: battery capacity [MWh]
+- ``P > 0``: maximum battery charge/discharge in one hour [MWh]
+- ``0 < η_p < 1``: charge efficiency
+- ``0 < η_d < 1``: discharge efficiency
+- ``c \geq 0``: tax paid when injecting energy onto the network [€/MWh]
 Our decision variables are:
 - ``x_t``: State-of-Charge (SoC) of the battery at time ``t`` [MWh]
 - ``p_t``: Energy discharged from the battery between ``t`` and ``t+1`` [MWh].
 - ``b_t``: Energy charged to the battery between ``t`` and ``t+1`` [MWh].
-The price at time ``t`` is denoted by ``λ_t``.
+The price at time ``t`` is denoted by ``λ_t`` (in €).
 The operational constraints are
 ```math
 0 ≤ x_t ≤ C,  
@@ -91,9 +89,10 @@ The deterministic optimization problem writes as a Linear Program (LP).
 ```
 
 ---
-**Question 2.** Name one optimization algorithm that can solve the previous LP problem.
+**Question 2.** Name one optimization algorithm to solve the previous LP problem efficiently.
 
 ---
+
 
 In what follows, we store the data of the problem in a structure `BatteryData`
 
@@ -118,6 +117,15 @@ We start by implementing the LP problem using the modeler JuMP.
 ```julia
 using JuMP
 
+"""
+    build_deterministic_model
+
+Take as input battery's specification `data` and a vector `price`
+encoding the evolution of the electricity price along time.
+Return a JuMP model implementing the optimization of the state-of-charge
+of the battery along time.
+
+"""
 function build_deterministic_model(data::BatteryData, price::Vector)
     T = length(price)
     model = Model()
@@ -163,6 +171,8 @@ We can plot the solution using the following lines:
 ```julia
 x_sol = JuMP.value.(det_model[:x])  # get optimal SoC
 plot(x_sol, lw=2.0, color=:black, label="Battery level")
+xlabel!("Time [h]")
+ylabel!("SoC [MWh]")
 ```
 
 ---
@@ -171,13 +181,13 @@ plot(x_sol, lw=2.0, color=:black, label="Battery level")
 ---
 
 # Part II: Stochastic model
-Now, we replace the previous deterministic model by a stochastic model taking
-explicitly into account the uncertainties in the future energy prices.
+Now, we replace the previous deterministic model by a stochastic model.
+The stochastic model takes explicitly into account the uncertainties in the future energy prices.
 
 ### Markovian model
 We use a classical stochastic model for the energy price. The previous
 price vector `price` now encodes the average energy price ``\overline{λ}_t`` (a.k.a. expected value).
-The log-deviation from the expected value is modeled with a stochastic process
+The log-deviation from the expected value is modeled by a stochastic process
 ``\{ ξ_t(ω) \}_{t}``, here modeled as a stationary Markov chain. The model writes,
 for all ``t= 1, ⋯, T``,
 ```math
@@ -187,7 +197,7 @@ or, equivalently,
 ```math
 λ_t(ω) = \overline{λ}_t ×  \exp{ξ_t(ω) }
 ```
-At each time step ``ξ_t(ω)`` can take ``N`` distinct values ``ξ_1, ⋯, ξ_N``.
+At each time step the uncertainty ``ξ_t(ω)`` can take ``N`` distinct values ``ξ_1, ⋯, ξ_N``.
 The number ``N`` is called the *lattice number* of the Markov chain.
 The transition between ``ξ_{t}`` and ``ξ_{t+1}`` are encoded by the following
 conditional probabilities:
@@ -195,7 +205,7 @@ conditional probabilities:
 \mathbb{P}[ ξ_{t+1} = ξ_j \; | \; ξ_t = ξ_i ] = p_{ij}
 ```
 The values and transition probabilities are stored as text files in the
-directory `data`. We provide a set of util functions to manipulate stationary
+directory `data/`. We provide a set of utility functions to manipulate stationary
 Markov chain in the script `markov.jl`:
 
 ```julia
@@ -220,11 +230,11 @@ and the values ``ξ_1, ⋯, ξ_4`` are:
 markov.x
 ```
 
-You can increase the discretization size up to 32 (in fact, ``N`` can take
+You can increase the discretization size up to 32 (``N`` can take
 any values in ``\{4, 8, 16, 32 \}``).
 
 The Markov chain `markov` defines our probabilistic model. The future energy prices
-are now uncertains, with probability distribution given by the Markov chain. You can
+are now uncertain, with probability distribution given by the Markov chain. You can
 sample a given number of scenarios from the Markov chain using the
 function `generate_price_scenarios`:
 
@@ -256,8 +266,9 @@ The problem becomes stochastic. We aim at minimizing the expected value of the c
 We want to solve the previous stochastic problem using the Stochastic Dynamic Programming algorithm.
 For our Markovian model, the Dynamic Programming equations adapt as follows.
 The value functions ``\{ Q_{t,j} \}_{t,j}`` satisfy the recursive equations: Starting from ``V_T(x) = 0``,
+we solve
 ```math
-Q_{t, j}(x_t) = \left\{
+Q_{t, j}(x) = \left\{
 \begin{aligned}
 \min_{x^+, p,b } \; & \lambda_{t, j} \times (b - p) + c \times p + V_{t+1, j}(x^+) \\
 \text{s.t.}   & x^+ = x - \frac{1}{η_p} p + η_d b \\
@@ -271,10 +282,11 @@ and update the value function ``V_{t, i}`` for ``i = 1, ⋯, N`` as
 ```math
 V_{t, i} = ∑_{j=1}^N p_{ij} Q_{t, j}
 ```
+The function ``Q_{t, j}`` is called the *Bellman operator*.
 
 ---
 **Question 5.** Write a pseudo-code that adapt the Stochastic Dynamic Programming algorithm
-in a Markovian setting.
+seen in the previous lecture in a Markovian setting.
 
 ---
 
@@ -288,16 +300,18 @@ V_{t, i}^k := V_{t, i}(x^k)   ∀ k=1,⋯,d
 For any ``x ∈ [0, C]``, we can evaluate ``V_{t,i}(x)`` using a linear interpolation.
 The interpolation is solution of the following LP:
 ```math
-V_{t,i}(x) = \min_{α ∈ \mathbb{R}^d} \;  ∑_{k=1}^d α_k V_{t,i}^k   \text{s.t.}   α_k ≥ 0 \; ,
+\overline{V}_{t,i}(x) = \min_{α ∈ \mathbb{R}^d} \;  ∑_{k=1}^d α_k V_{t,i}^k   \text{s.t.}   α_k ≥ 0 \; ,
   ∑_{k=1}^d α_k = 1 \; , \quad
   ∑_{k=1}^d α_k x^k = x
 ```
+As ``V_{t, i}`` is convex, we get ``V_{t, i}(x) \leq \overline{V}_{t, i}(x)`` for all ``x``.
 
 ---
-**Question 6.** Show that the interpolated value function ``Q_{t,j}^\ell := Q_{t,j}(x^\ell)``
-is solution of
+**Question 6.** Show that if we replace ``V_{t+1,j}`` by the inner interpolation
+``\overline{V}_{t+1, j}``, we obtain the following
+upper approximation for the Bellman operator ``Q_{t, j}``:
 ```math
-Q_{t, j}^\ell = \left\{
+\overline{Q}_{t, j}(x) = \left\{
 \begin{aligned}
 \min_{x^+, p,b,\alpha } \; & \lambda_{t, j} \times (b - p) + c \times p + ∑_{k=1}^N α_k V_{t+1, j}^k \\
 \text{s.t.}   & x^+ = x - \frac{1}{η_p} p + η_d b \\
@@ -308,15 +322,31 @@ Q_{t, j}^\ell = \left\{
 \end{aligned}
 \right.
 ```
-How many variables does the LP have?
 
 ---
 
-We define a function that takes as input the discretized value function ``V_{t,i}`` and implements
-the previous LP using JuMP.
+We define a function that takes as input the next (discretized) value function ``V_{t+1,j}`` and implements
+the Bellman operator ``Q_{t, j}`` as a LP.
 
 ```julia
 
+"""
+    build_subproblem_dp
+
+Implement the Bellman operator ``Q_{t, j}``.
+
+# Argument
+- `data::BatteryData`: the battery's specification `data`
+- `price::Float64`: current electricity's price
+- `xp::Vector{Float64}``, length `n_grid`: state discretization on a grid
+- `Vp::Vector{Float64}``, length `n_grid`: values taken by the value function ``V_{t+1, j}`` on the grid
+- `optimizer::MOI.AbstractOptimizer`: a valid LP solver
+- `n_grid::Int`: number of grid points
+
+# Output
+Return a JuMP model encoding the Bellman operator.
+
+"""
 function build_subproblem_dp(data, price, xp, Vp, optimizer, n_grid)
     @assert length(xp) == length(Vp) == n_grid
 
@@ -344,11 +374,30 @@ end
 
 ---
 **Question 7.** Use the function `build_subproblem_dp` to implement the
-Stochastic Dynamic Programming algorithm. We give here-after a skeleton for the implementation.
+Stochastic Dynamic Programming algorithm. We give right after a skeleton for the implementation.
 
 ---
 
+**Solution:**
 ```julia
+"""
+    solve_dp
+
+Solve the Stochastic Dynamic Programming recursive equations on a Markov chain.
+The subproblems are solved using a LP solver.
+
+## Arguments
+- `data::BatteryData`: battery's specification
+- `markov::StationaryMarkovChain`: Markov chain implementing the stochastic model
+- `avg_price::Vector{Float64}, dimension `T`: average value for the electricity price
+- `optimizer::MOI.AbstractOptimizer` (optional): LP solver
+- `n_grid::Int`: number of points used to discretize the SoC
+
+## Output
+
+- `V::Array{Float64, 3}`, dimension `(T+1, N, n_grid)`: value functions
+
+"""
 function solve_dp(
     data::BatteryData,
     markov::StationaryMarkovChain,
@@ -379,34 +428,31 @@ end
 
 ---
 **Question 8.** Set ``N=4`` and ``d = 101``. Solve the Dynamic Programming equations using the function `solve_dp`.
-Compute the numerical optimal solution returned by the algorithm. Plot the value functions
-at time ``t ∈ \{1, 25, 49, 72 \}`` at the lattice ``n=1``.
+Compute the (numerical) optimal objective returned by the algorithm. Plot the value functions
+at time ``t ∈ \{1, 25, 49, 72 \}``, at the lattice ``n=1``.
 
 ---
 
 
 ---
 **Question 9.** Set ``N = 4``. How does the numerical objective computed by SDP
-evolves as we increase the discretization size ``d``? Hint: take ``d ∈ \{11, 51, 101, 501, 1001 \}``.
+evolves as we increase the discretization size ``d`` (take ``d ∈ \{11, 51, 101, 501, 1001 \}``)?
 What is the impact of the discretization on the solution time?
 
 ---
 
+---
+**Question 10.** Set ``d = 101``.
+Plot the evolution of the objective computed by SDP for ``N ∈ \{4, 8, 16, 32\}``.
 
 ---
-**Question 10.** Set ``d = 101``. How does the objective returned by SDP
-evolve as we increase the number of lattices in the Markov chain? Hint: take ``N ∈ \{4, 8, 16, 32\}``.
 
 ---
-
-
----
-**Question 11.** Let ``\overline{λ} = (\overline{λ}_1, ⋯, \overline{λ}_T)`` be the average price.
+**Question 11.** Let ``\overline{λ} = (\overline{λ}_1, ⋯, \overline{λ}_T)`` be the average price along time.
 We note by ``v(λ)`` the solution of the deterministic problem for a given price vector ``λ``.
-Show that ``v(\overline{λ})`` is a upper bound for the optimal value.
+Show that ``v(\overline{λ})`` is an upper bound for the optimal value.
 
 ---
-
 
 ---
 **Question 12.** Let ``λ^i = (λ^i_1, ⋯, λ^i_T) ∈ \mathbb{R}^T`` be a random realization of the price process ``\{λ_t(ω)\}_t``.
@@ -416,7 +462,7 @@ for the optimal value. Give a confidence interval. Compute numerically the upper
 ---
 
 ### Simulating optimal policies
-We are now interested into implementing a control policy for the battery. At each time
+We want to implement a control policy for the battery. At each time
 ``t``, we should be able to determine how much energy we should charge/discharge to/from the battery.
 
 We start by implementing a naive policy. It charges the battery if the price is below average, and discharge it if the price is above average. The policy writes:
@@ -428,9 +474,10 @@ struct NaivePolicy
 end
 
 function (pol::NaivePolicy)(t::Int, x::Float64, p::Float64)
+    avg_price = sum(pol.price) / length(pol.price)
     C, P = pol.data.C, pol.data.P
     eta_p, eta_d = pol.data.eta_p, pol.data.eta_d
-    if p >= sum(pol.price) / length(pol.price)
+    if p >= avg_price
         return (0.0, min(P, x * eta_p))
     else
         return (min(P, (C - x) / eta_d), 0.0)
@@ -442,13 +489,28 @@ end
 We provide the following function to simulate a given policy along a given set of scenarios:
 
 ```julia
+"""
+    simulate_policy
+
+Simulate the policy `pol` on a set of scenarios `scenarios`.
+
+## Arguments
+- `pol`: policy to simulate
+- `scenarios::Matrix{Float64}, dimension `(T, n_scenarios)`: price scenarios
+- `data::BatteryData`: battery's specifications
+
+## Output
+- `cost::Vector{Float64}`, dimension `n_scenarios`: stores the cost obtained on each scenario
+- `x::Matrix{Float64}`, dimension `(T+1, n_scenarios)`: stores the SoC's trajectory on each scenario
+
+"""
 function simulate_policy(
     pol,
     scenarios::Matrix,
     data::BatteryData,
 )
-    horizon, nscenarios = size(scenarios)
-    T = horizon - 1
+    T, nscenarios = size(scenarios)
+    horizon = T + 1
 
     x = zeros(horizon, nscenarios)
     cost = zeros(nscenarios)
@@ -470,13 +532,12 @@ end
 ---
 **Question 13.** Do you think `NaivePolicy` is a good policy?
 Generate 1,000 scenarios using the function `generate_price_scenarios` and simulate the behavior
-of `NaivePolicy` using `simulate_policy`. Plot the histogram of the cost and the evolution of
+of `NaivePolicy` using the function `simulate_policy`. Plot the histogram of the cost and the evolution of
 10 trajectories for the state-of-charge of the battery. Is the naive policy profitable?
 
 ---
 
-
-We now write a policy that uses the value functions computed by the SDP algorithm
+We write a policy that uses the value functions computed by the SDP algorithm
 to determine whether to charge/discharge the battery. The code is given below.
 
 ```julia
@@ -488,12 +549,13 @@ struct DPPolicy
 end
 
 function DPPolicy(data, price, markov, V; optimizer=HiGHS.Optimizer)
-    T = length(price) - 1
+    T = length(price)
     Nd = size(V, 2)
     n_grid = size(V, 3)
     xmin, xmax = 0.0, data.C
     xgrids = collect(range(xmin, xmax, n_grid))
     models = Matrix{JuMP.Model}(undef, T, Nd)
+    # Build a cache that stores all the Bellman operator Q_{t, j}
     for t in 1:T, i in 1:Nd
         p = price[t] * exp(markov.x[i])
         models[t, i] = build_subproblem_dp(data, p, xgrids, V[t+1, i, :], optimizer, n_grid)
@@ -514,57 +576,90 @@ end
 ```
 
 ---
-**Question 14.** Explain what `DPPolicy` is doing.
+**Question 14.** Explain the algorithm implemented in  `DPPolicy`.
 Simulate the behavior of `DPPolicy` on 1,000 scenarios.
 Plot the histogram of the cost and the evolution of 10 trajectories for the state-of-charge of the battery.
 Compare the value obtained in simulation with
 (1) the numerical optimal value obtained by SDP, and
-(2) the statistical lower-bound.
+(2) the statistical upper-bound.
 Comment the results.
 
 ---
 
 
+
 # Part III: Expliciting the solution
 We have seen during the lecture that for linear problems, the optimal policy
-is polyhedral. Here, it turns out that the model is simple enough so that we can obtain
+is polyhedral. Here, the model is simple enough to obtain
 a complete characterization of the optimal solution. This brings two major simplifications:
 1. We can remove the LP solver in the SDP algorithm to obtain a significant speed-up.
-2. We can write up explicitly the optimal policy.
+2. We can characterize explicitly the optimal policy.
 
-We start by having a closer look at the optimal solution. We note by ``v_{t, i}`` an
-element of the subdifferential of the convex function ``V_{t, i}``:
+We start by having a closer look at the optimal solution. We note by ``v_{t, i}(x)`` an
+element of the subdifferential of the convex function ``V_{t, i}`` at ``x``:
 ```math
 v_{t, i}(x) ∈ ∂ V_{t, i}(x)
 ```
 
----
-**Question 15.** Write the KKT conditions of the Bellman operator and show they depend on
-``v_{t+1, i}(x^+)``.
+The bound constraints ``0 \leq x_+ \leq C`` can be incorporated into the bound constraints porting on ``b`` and ``p``:
+```math
+0 \leq b \leq \overline{b}(x) := \min\Big(\frac{c-x}{\eta_d}, P\Big) \; , \quad
+0 \leq p \leq \overline{p}(x) := \min\Big(\eta_p x, P\Big) \; .
+
+```
+The Bellman operator ``Q_{t, j}(x)`` rewrites as
+```math
+Q_{t, j}(x_t) = \left\{
+\begin{aligned}
+\min_{x^+, p,b } \; & \lambda_{t, j} \times (b - p) + c \times p + V_{t+1, j}(x^+) \\
+\text{s.t.}   & x^+ = x - \frac{1}{η_p} p + η_d b \\
+              & 0 ≤ p ≤ \overline{p}(x) \\
+              & 0 ≤ b ≤ \overline{b}(x) \\
+\end{aligned}
+\right.
+```
+We introduce the following Lagrangian for previous optimization problem ``Q_{t+1, j}``:
+```math
+L(x^+, b, p, \beta, \gamma, \varepsilon, \pi) =
+\lambda_{t, j} (b - p) + c p + V_{t+1,j}(x)
+-\underline{\beta} b + \overline{\beta} (b - \overline{b}(x))
+-\underline{\gamma} p + \overline{\gamma} (p - \overline{p}(x)) +
+\pi (x - \frac{1}{\eta_p} p + \eta_d b - x_+)
+
+```
 
 ---
+**Question 15.**
+Write the KKT conditions of the Bellman operator ``Q_{t, j}`` and show they depend on
+the future sensitivity ``v_{t+1, j}(x_+) \in \partial V_{t+1, j}(x_+)``.
+
+---
+
 
 ---
 **Question 16.** Suppose that for all ``t``, the price is non-negative: ``λ_t ≥ 0``. Is it
-a reasonable assumption? Show that in that case we cannot charge and discharge the battery simultaneously:
-``p_t × b_t = 0``.
+a reasonable assumption? Under this assumption, prove that we cannot charge and discharge the battery simultaneously
+(or ``p × b = 0``: we say that ``p`` and ``b`` are *complementary* to each other).
 
 ---
+
 
 ---
 **Question 17.** Deduce from Question 16 that only the three following situations can occur:
-- (1) ``b > 0, p =0``.
-- (2) ``b = 0, p =0``.
-- (3) ``b = 0, p > 0``.
-Use the KKT conditions to characterize each of the previous 3 situations using the problem's data.
+1. ``b > 0, p =0``.
+2. ``b = 0, p =0``.
+3. ``b = 0, p > 0``.
+Use the KKT conditions to characterize each of the previous 3 situations using the problem's data
+and the sensitivity ``v_{t+1, j}(x_+)``.
 
 ---
+
 
 ---
 **Question 18.** Show that the sensitivity ``\{ v_{t, i} \}_t`` satisfies a set of
 recursive equations, analogous to the Dynamic Programming equations.
 Exploit this property to propose an alternative algorithm that does not rely on
-a linear solver.
+a LP solver.
 
 ---
 
@@ -575,7 +670,9 @@ Compare its performance with the SDP algorithm implemented previously in the fun
 ---
 
 ---
-**Question 20.** Write the optimal policy. How can we improve the previous `NaivePolicy`
-to improve its performance?
+**Question 20.** Write the optimal policy. Plot the value of ``b`` and ``p`` w.r.t.
+the price ``\lambda_{t, j}``. Is the policy (i) linear? (ii) affine ? (iii) piecewise affine?
+Explain why ``v_{t+1, j}(x_+)`` is called the *value of the stock*.
 
 ---
+

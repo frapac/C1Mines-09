@@ -47,8 +47,8 @@ function generate_price_scenarios(
     avg_price::Vector,
     nscenarios::Int,
 )
-    horizon = length(avg_price)
-    T = horizon - 1
+    T = length(avg_price)
+    horizon = T + 1
     Nd = length(markov.x)
     w = zeros(T, nscenarios)
 
