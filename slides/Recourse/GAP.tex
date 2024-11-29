@@ -1,7 +1,7 @@
-\begin{frame}{Stochastic programs with recourse} 
+\begin{frame}{Stochastic programs with recourse}
 Let's consider SP of the form
 \[
-\min_{x \in X}\, \E[f(x,\omega)] 
+\min_{x \in X}\, \E[f(x,\omega)]
 \]
 where
 \begin{itemize}
@@ -25,7 +25,7 @@ where
 \pula
 
 \item Resulting problem
-\[ 
+\[
 \min_{x \in X}\, f^N(x)\quad \mbox{with}\quad f^N(x):=\sum_{i=1}^{N}p_if(x,\omega^i)
 \]
 \end{itemize}
@@ -36,32 +36,30 @@ where
 \]
 \end{block}
  \end{frame}
- 
- 
- 
- 
-\begin{frame}
-\begin{block}{How to proceed when we do not know $P$?}
-\begin{itemize}
-\item In many applications the probability distribution is not precisely known
-\pula
-
-\item In these cases, $ P $ is estimated by using the historical of the stochastic vector
-\pula
-
-\item Scenario generation can be done via Monte Carlo simulation (it is advisable not to use
-the historical as scenarios)
-\end{itemize}
-\pula
-\end{block}
-\begin{block}{Representation of the uncertainties}
-\begin{center}
-\includegraphics[width=5cm]{../Figs/formatos.pdf} {}
-\end{center}
-\end{block} 
-\end{frame}
 
 
+
+
+% \begin{frame}
+% \begin{block}{How to proceed when we do not know $P$?}
+% \begin{itemize}
+% \item In many applications the probability distribution is not precisely known
+% \pula
+
+% \item In these cases, $ P $ is estimated by using the historical of the stochastic vector
+% \pula
+
+% \item Scenario generation can be done via Monte Carlo simulation (it is advisable not to use
+% the historical as scenarios)
+% \end{itemize}
+% \pula
+% \end{block}
+% \begin{block}{Representation of the uncertainties}
+% \begin{center}
+% \includegraphics[width=5cm]{../Figs/formatos.pdf} {}
+% \end{center}
+% \end{block}
+% \end{frame}
 
 
 
@@ -70,11 +68,13 @@ the historical as scenarios)
 
 
 
- 
- 
 
- 
- 
+
+
+
+
+
+
 \begin{frame}{Evaluating a candidate solution }
 
 The point $\hat x^N$ solution  of
@@ -83,7 +83,7 @@ The point $\hat x^N$ solution  of
 \]
 is a candidate solution to the ``true" problem
 \[
-f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\E[f(x,\omega)] 
+f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\E[f(x,\omega)]
 \]
 \pula
 
@@ -97,15 +97,15 @@ We thus have the following \verm{unknown} optimality gap
 
 \azul{In what follows we are going to find an estimator $\hat{{\tt gap}}(\hat x^N) $ for ${\tt gap} (\hat x^N)$}
  \end{frame}
- 
- 
+
+
 \begin{frame}{An upper bound (confidential interval) for ${\tt gap}(\hat x^N)$}
 \begin{itemize}
-\item Generate randomly, from the probability distribution of $\omega$, a (iid) sample with $N$ scenarios 
+\item Generate randomly, from the probability distribution of $\omega$, a (iid) sample with $N$ scenarios
 \pula
 \item Obtain  $\hat x^N$ a solution of the resulting SAA problem
 \pula
-\item Generate randomly, from the probability distribution of $\omega$, another (iid) sample with $N'>>N$ scenarios 
+\item Generate randomly, from the probability distribution of $\omega$, another (iid) sample with $N'>>N$ scenarios
 \pula
 \item Compute $f^{N'}(\hat x^N)= \frac{1}{N'}\sum_{i=1}^{N'} f(\hat x^N,\omega^i)$
 \pula
@@ -121,18 +121,18 @@ U_{N}'(\hat x^N):= f^{N'}(\hat x^N) + z_{\alpha}\hat \sigma_{N'}(\hat x^N)\,,
 }
 where $z_\alpha=\Phi^{-1}(1-\alpha)$ and $\Phi(z)$ is standard normal distribution. Ex: if $\alpha =5\%$, then $z_\alpha\approx 1.64$.
 \end{itemize}
-\end{frame} 
+\end{frame}
 
 \begin{frame}{ }
 \begin{itemize}
 \item Before defining a lower bound for the confidential interval of  ${\tt gap} (\hat x^N)$, notice that, for every given $x \in X$
 \[
 f(x)=\E[f^N(x)]\geq \E[\min_{y \in X} f^N(y)]=\E[\hat f^N]
-\] 
+\]
 (\azul{because  $f^N(x)$ is an unbiased estimator of $f(x)$})
 \pula
 
-\item Hence, we get the following useful inequality 
+\item Hence, we get the following useful inequality
 \[
 f^*\geq \E[\hat f^N]
 \]
@@ -164,7 +164,7 @@ f^*\geq \E[\hat f^N]
 L_N':= \bar f^{N,M} - t_{\alpha,\nu}\hat \sigma_{N,M}\,,
 \]
 }
-where $\nu=M-1$ and $t_{\alpha,s}$ is the critical value of the Student's $t$-distribution with $\nu$ degrees of freedom 
+where $\nu=M-1$ and $t_{\alpha,s}$ is the critical value of the Student's $t$-distribution with $\nu$ degrees of freedom
 \end{itemize}
 \end{frame}
 %
@@ -208,14 +208,14 @@ $. Then,
 \[
 \azul{[0,\,\hat{{\tt gap}}(\hat x^N)]}
 \]
-is a $(1-2\alpha)$-confidence interval for the optimality gap  ${\tt gap} (\hat x^N)$
+is a $(1-2\alpha)$-confidence interval for  ${\tt gap} (\hat x^N)$
 
 \pula
-\item If the estimator $\hat{{\tt gap}}(\hat x^N):= U_{N'}(\hat x) - L_{N,M}$ is small enough, so is the optimality gap  ${\tt gap}(\hat x^N)$
+\item If the estimator $\hat{{\tt gap}}(\hat x^N):= U_{N'}(\hat x) - L_{N,M}$ is small enough, so is ${\tt gap}(\hat x^N)$
 \pula
 \item Hence, we can say that $\hat x^N$ is a good candidate for solving the true problem
 \[
-f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\int_{\omega \in \Omega} f(x,\omega)dP(\omega) 
+f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\int_{\omega \in \Omega} f(x,\omega)dP(\omega)
 \]
 \end{itemize}
 \end{frame}
@@ -241,8 +241,8 @@ f^*=\min_{x \in X} f(x)\quad \mbox{with}\quad f(x)=\int_{\omega \in \Omega} f(x,
 \begin{center}
 \includegraphics[width=5cm]{../Figs/KSteste.png} {}
 \end{center}
- \end{frame} 
- 
+ \end{frame}
+
 \begin{frame}{The KS-test}
 
 Another idea widely used in practice is:
@@ -270,7 +270,7 @@ Another idea widely used in practice is:
 
 \item it allows us to estimate an appropriated sample size
 \end{itemize}
-\end{frame} 
+\end{frame}
 
 \begin{frame}{Computational practice}
 Consider the following 2-SLP\[
@@ -291,7 +291,7 @@ The problem's data and scenarios are available at the link \url{www.oliveira.mat
 
 A line of the file {\tt Sample1.csv}  = a scenario $\xi^i$  (first line = first scenario)
 
-\pula Solve the Equivalent deterministic for $N = 5, 10, 1\,000$ and $10\,000$  
+\pula Solve the Equivalent deterministic for $N = 5, 10, 1\,000$ and $10\,000$
 %\pula The SAA approximation of this problem is
 %\[
 % \min_{x \in  X}\,c^\top  x + \frac {1}{N}\sum_{i=1}^NQ(x, \xi^i)
@@ -303,67 +303,67 @@ A line of the file {\tt Sample1.csv}  = a scenario $\xi^i$  (first line = first 
 {N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
 
 \begin{itemize}
-\item Lower bound: 628.744 
+\item Lower bound: 628.744
 
-\item SAA value:  661.549 
+\item SAA value:  661.549
 
-\item Simulated value:  705.676 
+\item Simulated value:  705.676
 
-\item Upper bound:  711.364 
+\item Upper bound:  711.364
 \end{itemize}
 
-\centering \includegraphics[width=1.1\textwidth]{../Figs/gap5a}  
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap5a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
 
 \begin{itemize}
-\item Lower bound: 620.804  
+\item Lower bound: 620.804
 
-\item SAA value:  669.281 
+\item SAA value:  669.281
 
-\item Simulated value:  728.717  
+\item Simulated value:  728.717
 
-\item Upper bound:  734.633 
+\item Upper bound:  734.633
 \end{itemize}
 
-\centering \includegraphics[width=1.1\textwidth]{../Figs/gap5b}  
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap5b}
 \end{frame}
 
 
 \begin{frame}{A numerical example}
 {N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/M5a} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M5a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/M5b} 
-\end{frame}
-
-
-
-\begin{frame}{A numerical example}
-{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/ks5a} 
-\end{frame}
-
-\begin{frame}{A numerical example}
-{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/ks5b} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M5b}
 \end{frame}
 
 
 
 \begin{frame}{A numerical example}
 {N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/sol5a} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks5a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/sol5b} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks5b}
+\end{frame}
+
+
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 1}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol5a}
+\end{frame}
+
+\begin{frame}{A numerical example}
+{N = 5 scenarios. Simulation N'=1000, M = 10. Sample 2}
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol5b}
 \end{frame}
 
 %--------------------
@@ -371,38 +371,38 @@ A line of the file {\tt Sample1.csv}  = a scenario $\xi^i$  (first line = first 
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
 
 \begin{itemize}
-\item Lower bound: 693.909  
+\item Lower bound: 693.909
 
-\item SAA value:  693.871 
+\item SAA value:  693.871
 
 \item Simulated value:  693.746
 
-\item Upper bound:  698.871 
+\item Upper bound:  698.871
 \end{itemize}
 
-\centering \includegraphics[width=1.1\textwidth]{../Figs/gap100a}  
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap100a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
 
 \begin{itemize}
-\item Lower bound: 695.389  
+\item Lower bound: 695.389
 
-\item SAA value:  693.353 
+\item SAA value:  693.353
 
-\item Simulated value:  695.700  
+\item Simulated value:  695.700
 
-\item Upper bound:  701.052 
+\item Upper bound:  701.052
 \end{itemize}
 
-\centering \includegraphics[width=1.1\textwidth]{../Figs/gap100b}  
+\centering \includegraphics[width=1.1\textwidth]{../Figs/gap100b}
 \end{frame}
 
 \begin{frame}{A numerical example}
 This means that the optimal value of
 \[
- \min_{x \in  X}\,f(x)\,,\quad\mbox{with}\quad f(x):=c^\top  x + \E[Q(x, \xi)],\; 
+ \min_{x \in  X}\,f(x)\,,\quad\mbox{with}\quad f(x):=c^\top  x + \E[Q(x, \xi)],\;
 \]
 is withing the interval
 \[
@@ -413,32 +413,32 @@ with 90\% of confidence
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/M100a} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M100a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/M100b} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/M100b}
 \end{frame}
 
 
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/ks100a} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks100a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/ks100b} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/ks100b}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 1}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/sol100a} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol100a}
 \end{frame}
 
 \begin{frame}{A numerical example}
 {N = 100 scenarios. Simulation N'=1000, M = 10. Sample 2}
-\centering \includegraphics[width=1.1\textwidth]{../Figs/sol100b} 
+\centering \includegraphics[width=1.1\textwidth]{../Figs/sol100b}
 \end{frame}

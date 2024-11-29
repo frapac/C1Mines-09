@@ -1,4 +1,4 @@
-\begin{frame}{Stochastic programs with recourse} 
+\begin{frame}{Stochastic programs with recourse}
 Let's consider SP of the form
 \[
 \min_{x \in X}\, \E[f(x,\omega)]\,
@@ -19,27 +19,27 @@ f(x,\omega) = c^\top x + Q(x,\omega)
 with
 \[Q(\verm{x},\azul{\omega}):=\left\{ \begin{array}{rll}
 \min & q(\azul{\omega})^\top y &\\
-\mbox{s.t.} & W(\azul{\omega}) y   =h(\azul{\omega})-T(\azul{\omega})\verm{x}&\\ 
+\mbox{s.t.} & W(\azul{\omega}) y   =h(\azul{\omega})-T(\azul{\omega})\verm{x}&\\
 & y  \geq 0  &
 \end{array} \right.\]
 \end{frame}
 
 
-%\begin{frame}{Example} 
+%\begin{frame}{Example}
 %{
 %\[\hspace{-1cm}(P)\quad \left\{ \begin{array}{cl}\displaystyle \min_{x,y(\omega)} & 2x_{1} + 3x_{2} +\E[ 7y_1(\omega) + 12y_2(\omega)]\\
 %& \begin{array}{rrrll}
 %x_{1} & + x_{2} &  &  \leq 100&\\
 %2x_{1}  &+ 6x_{2} &+y_1(\omega) &  \geq h_1(\omega)\\
 %3x_{1}  &+ 3x_{2} &  +y_2(\omega) & \geq h_2(\omega)\\
-% & x_{1} \,, x_{2}\geq0\,,& y_1(\omega) \,, y_2(\omega)  & \geq 0  
+% & x_{1} \,, x_{2}\geq0\,,& y_1(\omega) \,, y_2(\omega)  & \geq 0
 %\end{array}
 %\end{array}\right.\]
 % }
 %\verm{The studied example of oil/gasoline management fits this formulation}
 % \pula
-% 
-%Define $f(x,\verm{\omega}) = 2x_{1} + 3x_{2} + Q(x,\verm{\omega})$, with 
+%
+%Define $f(x,\verm{\omega}) = 2x_{1} + 3x_{2} + Q(x,\verm{\omega})$, with
 %\[Q(x,\verm{\omega}):=\left\{
 %\begin{array}{lllll}
 %\displaystyle \min_{y\geq 0} &7y_1 + 12y_2\\
@@ -49,7 +49,7 @@ with
 %\end{array}\right.
 %\]
 %
-%which is equivalent to 
+%which is equivalent to
 %\[\azul{Q(x,\omega)=
 %7[h_1(\omega) -(2x_{1}  + 6x_{2} )]^+ + 12[ h_2(\omega)-(3x_{1}  + 3x_{2} )]^+
 %}
@@ -80,7 +80,7 @@ with
 \pula
 
 \item Resulting problem
-\[ 
+\[
 \min_{x \in X}\, f^N(x)\quad \mbox{with}\quad f^N(x):=\sum_{i=1}^{N}p_if(x,\omega^i)
 \]
 \end{itemize}
@@ -91,9 +91,9 @@ with
 \]
 \end{block}
  \end{frame}
- 
- 
- 
+
+
+
 \begin{frame}
 \begin{block}{How to proceed when we do not know $P$?}
 \begin{itemize}
@@ -112,7 +112,7 @@ the historical as scenarios)
 \begin{center}
 \includegraphics[width=5cm]{../Figs/formatos.pdf} {}
 \end{center}
-\end{block} 
+\end{block}
 \end{frame}
 
 
@@ -132,7 +132,7 @@ the historical as scenarios)
 
 \item The newsvendor wishes to maximize its expected income:
 \[
-\min_{x\geq 0} \E[f(x,\omega)],
+\max_{x\geq 0} \E[f(x,\omega)],
 \]
 where
 \[
@@ -144,7 +144,7 @@ f(x,\omega) &= -[-cx + r\min\{x,\omega\} +  s(x - \min\{x,\omega\})]\\
 \]
 \end{itemize}
 
- \end{frame} 
+ \end{frame}
 
 
 
@@ -170,9 +170,9 @@ f(x,\omega) &= -[-cx + r\min\{x,\omega\} +  s(x - \min\{x,\omega\})]\\
 %\begin{center}
 %\includegraphics[width=6cm]{Figs/jornaleiro1.png} {}
 %\end{center}
-%\end{frame} 
- 
- 
+%\end{frame}
+
+
 
 \begin{frame}{Sample Average Approximation - SAA}
 
@@ -189,7 +189,7 @@ regardless the given point $x$
 \begin{center}
 \includegraphics[width=6.5cm]{../Figs/jornaleiro2.png} {}
 \end{center}
- \end{frame} 
+ \end{frame}
 
 
 
@@ -203,7 +203,7 @@ regardless the given point $x$
 
 \item This suggests replacing the original problem $ \min_{x \in X} f (x) $ by
 \[
-\min_{x \in X} f^N (x) 
+\min_{x \in X} f^N (x)
 \]
 which can be solved by deterministic methods (L-Shaped, Nested Decomposition, Bundle Method, etc.)
 \end{itemize}
@@ -219,14 +219,14 @@ which can be solved by deterministic methods (L-Shaped, Nested Decomposition, Bu
 \end{itemize}
 \end{block}
 
- \end{frame} 
- 
- 
- 
+ \end{frame}
+
+
+
 
 \begin{frame}{Asymptotic properties}
 
-Let 
+Let
 \begin{itemize}
 \item $\hat x^N$ be a solution of the SAA problem
 \item $\hat S^N$ be the solution set of the SAA problem
@@ -243,17 +243,17 @@ and
 \begin{block}{Questions}
 \begin{itemize}
 \item $\lim_{N\to \infty} \hat x^N = x^*$?
-\pula 
+\pula
 \item $\lim_{N\to \infty} dist(S^N,S^*) = 0$?
 \pula
 \item $\lim_{N\to \infty} \hat f^N = f^*$?
 
 \end{itemize}
 \end{block}
- \end{frame} 
- 
- 
- 
+ \end{frame}
+
+
+
 \begin{frame}{Asymptotic properties}
 \begin{itemize}
 \item Firstly, let's try to answer these questions by considering the newsvendor problem
@@ -268,7 +268,7 @@ and
 \begin{center}
 \includegraphics[width=9cm]{../Figs/jornaleiro3.png} {}
 \end{center}
-\end{frame} 
+\end{frame}
 
 
 
@@ -282,23 +282,23 @@ and
 
 \begin{center}
 \begin{tabular}{|c|c|c|c|c|c|}
-\hline 
-N & 10 & 30 & 90 & 270 & $\infty$ \\ 
-\hline 
-$\hat x^N$ & 1.46 & 1.44 & 1.54 & 2.02 & 2.23 \\ 
-\hline 
-$\hat f^N$ & -1.11 & -0.84 & -0.98 & -1.06 & -1.07 \\ 
-\hline 
-\end{tabular} 
+\hline
+N & 10 & 30 & 90 & 270 & $\infty$ \\
+\hline
+$\hat x^N$ & 1.46 & 1.44 & 1.54 & 2.02 & 2.23 \\
+\hline
+$\hat f^N$ & -1.11 & -0.84 & -0.98 & -1.06 & -1.07 \\
+\hline
+\end{tabular}
 \end{center}
 \item It seems that $f^N$ approximates well $f^*$ when $N$ increases
 \pula
 
 \item Notice that $\hat x^N \to x^*$ and $\hat f^N \to f^*$
 \end{itemize}
- \end{frame} 
- 
- 
+ \end{frame}
+
+
 
 \begin{frame}{Asymptotic properties}
 
@@ -311,9 +311,9 @@ $\hat f^N$ & -1.11 & -0.84 & -0.98 & -1.06 & -1.07 \\
 \begin{center}
 \includegraphics[width=9cm]{../Figs/jornaleiro4.png} {}
 \end{center}
-\end{frame} 
- 
- 
+\end{frame}
+
+
 \begin{frame}{Asymptotic properties}
 
 \begin{itemize}
@@ -323,20 +323,20 @@ $\hat f^N$ & -1.11 & -0.84 & -0.98 & -1.06 & -1.07 \\
 
 \begin{center}
 \begin{tabular}{|c|c|c|c|c|c|}
-\hline 
-N & 10 & 30 & 90 & 270 & $\infty$ \\ 
-\hline 
-$\hat x^N$ & 2 & 3 & 3 & 2 & [2,3] \\ 
-\hline 
-$\hat f^N$ & -2.00 & -2.50 & -1.67 & -1.35 & -1.50 \\ 
-\hline 
-\end{tabular} 
+\hline
+N & 10 & 30 & 90 & 270 & $\infty$ \\
+\hline
+$\hat x^N$ & 2 & 3 & 3 & 2 & [2,3] \\
+\hline
+$\hat f^N$ & -2.00 & -2.50 & -1.67 & -1.35 & -1.50 \\
+\hline
+\end{tabular}
 \end{center}
 
 \item Again, it seems that  $f^N$ approximates well $f^*$ when $N$ increases
 \pula
 
-\item Notice that  $\hat f^N \to f^*$, but $\hat x^N$ does not seem to converge 
+\item Notice that  $\hat f^N \to f^*$, but $\hat x^N$ does not seem to converge
 \pula
 \item $\hat x^N$ is oscillating between two optimal solutions of the problem
 \pula
@@ -344,7 +344,7 @@ $\hat f^N$ & -2.00 & -2.50 & -1.67 & -1.35 & -1.50 \\
 \item What can we conclude?
 \end{itemize}
 
- \end{frame} 
+ \end{frame}
 
 \begin{frame}{Convergence results}
 
@@ -354,7 +354,7 @@ $\hat f^N$ & -2.00 & -2.50 & -1.67 & -1.35 & -1.50 \\
 \item In both cases (continuous and discrete) the function  $f^N$ converges uniformly to $f$
 \pula
 
-\item Uniform convergence occurs, for instance, when $f$ is continuous 
+\item Uniform convergence occurs, for instance, when $f$ is continuous
 \pula
 
 \item When continuous convergence is observed, we have the following results
@@ -368,13 +368,13 @@ $\hat f^N$ & -2.00 & -2.50 & -1.67 & -1.35 & -1.50 \\
 \item Suppose there exists a compact set $C$ such that
 \begin{itemize}
 \item $\emptyset\neq S^* \subset  C$ and $\emptyset\neq S^N \subset  C$ (w.p.1) for $N$ large enough
-\item the objective function is continuous and finite-valued on $C$ 
+\item the objective function is continuous and finite-valued on $C$
 \end{itemize}
 \pula
 \verm{Then $\lim_{N \to \infty} dist(S^N,S^*) = 0$ w.p.1}
 \end{itemize}
 \end{theorem}
- \end{frame} 
+ \end{frame}
 
 
 \begin{frame}{What does ``convergence w.p.1" mean?}
@@ -382,7 +382,7 @@ $\hat f^N$ & -2.00 & -2.50 & -1.67 & -1.35 & -1.50 \\
 \begin{itemize}
 \item  Each function  $f^N$ is constructed with a single sample
 \pula
-\item Regardless the sample,  convergence results hold provided that $N \to \infty$ 
+\item Regardless the sample,  convergence results hold provided that $N \to \infty$
 \end{itemize}
 \pula
 Let's repeat the same experiment for $N=270$ several times:
@@ -393,10 +393,10 @@ Let's repeat the same experiment for $N=270$ several times:
 {\small
 (a) Exponential distribution \quad \quad (b) Discrete uniform distribution}
 \end{center}
- \end{frame} 
- 
- 
- 
+ \end{frame}
+
+
+
 \begin{frame}{What does ``convergence w.p.1" mean?}
 
 
@@ -423,7 +423,7 @@ Let's repeat the same experiment for $N=270$ several times:
 \item The answer is: \verm{we do not know for sure}. However, we may employ simulation and statistical tools to access quality
 \end{itemize}
 
- \end{frame} 
+ \end{frame}
 
 
 \begin{frame}{A result on the sample size}
@@ -434,13 +434,13 @@ Let's repeat the same experiment for $N=270$ several times:
 
 
 \begin{theorem}
-Suppose the true stochastic program has a unique solution $x^*$, $X$ is a compact set and $f(\cdot, \omega)$ is strongly convex. 
+Suppose the true stochastic program has a unique solution $x^*$, $X$ is a compact set and $f(\cdot, \omega)$ is strongly convex.
 Then, for all $\epsilon >0$ there exist constants $\beta(\epsilon)>0$ and $C>0$ such that
 \[
 \mathbb{P}[\|\hat x^N- x^*\|>\epsilon] \leq  C e^{-N\,\beta(\epsilon)}
 \]
 
-\pause 
+\pause
 
 \azul{The theorem ensures the existence of such constants, but not their values}
 \pula
@@ -448,10 +448,10 @@ Then, for all $\epsilon >0$ there exist constants $\beta(\epsilon)>0$ and $C>0$ 
 \verm{We need to perform simulation...}
 \end{theorem}
 
- \end{frame} 
-  
-  
-  
+ \end{frame}
+
+
+
 \begin{frame}{Simulation}
 
 \begin{itemize}
@@ -467,7 +467,7 @@ f(\hat x^N, \tilde \omega^j), \quad j=1,\ldots N' \;\; (>> N)
 (\azul{Evaluating the function is easier than solving the SAA problem})
 \end{itemize}
 
- \end{frame} 
+ \end{frame}
 
 
 
@@ -490,8 +490,8 @@ f(\hat x^N, \tilde \omega^j), \quad j=1,\ldots N' \;\; (>> N)
 \begin{center}
 \includegraphics[width=5cm]{../Figs/KSteste.png} {}
 \end{center}
- \end{frame} 
- 
+ \end{frame}
+
 \begin{frame}{Simulation}
 
 Another idea widely used in practice is:
@@ -519,7 +519,7 @@ Another idea widely used in practice is:
 
 \item it allows us to estimate an appropriated sample size
 \end{itemize}
-\end{frame} 
+\end{frame}
 
 %%%%%%%%%%%%%%%
 
@@ -545,7 +545,7 @@ Thus, we can use $f^N(x)$ as an approximation of \[f(x)=\E[f(x,\omega)]\]
 \item Sometimes $f^N$ can be an accurate approximation of $f$, sometimes not
 \end{itemize}
 \end{block}
- \end{frame} 
+ \end{frame}
 
 \begin{frame}{The Central Limit Theorem }
  As $f^N$ is a random variable, it makes sense to compute its mean and variance. Let $x$ be a given point:
@@ -568,14 +568,14 @@ Thus, we can use $f^N(x)$ as an approximation of \[f(x)=\E[f(x,\omega)]\]
 \frac{\sqrt{N}[f^N(x) - f(x)]}{\sigma}\approx \mathcal{N}(0,1)
 \]
 \end{block}
- \end{frame} 
- 
+ \end{frame}
+
 
 \begin{frame}{The Central Limit Theorem }
 \[
 \frac{\sqrt{N}[f^N(x) - f(x)]}{\sigma}\approx \mathcal{N}(0,1)
 \]
-\pula 
+\pula
 
 The CLT ensures that, for an arbitrary $x \in {\tt dom}\, (f)$, $\sqrt{N}[f^N(x) - f(x)]$
 converges in distribution to normal distribution with zero mean and variance equal to $\sigma^2=\var[f(x,\omega)]$ (provided that this variance is finite)
@@ -586,7 +586,7 @@ Consequently $f^N(x)$ converges to $f(x)$ at a (stochastic) rate of $\mathcal{O}
 
 In other words, in order to estimate $f(x)$ by its sample average with an
 accuracy $\epsilon>0$ one needs a sample of size $N = \mathcal{O}_2(\epsilon^{-2})$
-\pula 
+\pula
 
 Although various techniques, e.g., variance reduction techniques and quasi-Monte Carlo
 methods, were developed in simulation literature in order to enhance the
@@ -599,7 +599,7 @@ As a conclusion, when solving a SAA problem, keep in mind that you're solving on
 \pula
 However, there are manners to estimate how good or how bad is the SAA solution...
 
- \end{frame} 
+ \end{frame}
 
 \begin{frame}{Computing the error of the estimated value}
 {Confidence interval}
@@ -620,7 +620,7 @@ The variance  $\sigma^2$ is generally unknown, but it can be estimated by
 \[
 S^2 = \frac{\sum_{i=1}^N [f(x,\omega^i) - f^N(x)]^2}{N-1}
 \]
- \end{frame} 
+ \end{frame}
 
 
 \begin{frame}{ }
@@ -632,8 +632,8 @@ that the following conditions are satisfied:
 manageable
 \item  (ii) it is possible to solve the constructed SAA problem with
 a reasonable efficiency
-\end{itemize} 
-\pula 
+\end{itemize}
+\pula
 
 From this point of view the number of scenarios of
 the true problem (i.e., cardinality of the support $\Omega$ of the distribution of $\omega$)
@@ -648,9 +648,9 @@ stage linear stochastic programming with recourse
 %(in particular,
 %$f(x,\omega)$ should be finite valued for a.e. realization of $\omega$
 \end{frame}
-  
-  
-\begin{frame} {Some conclusions} 
+
+
+\begin{frame} {Some conclusions}
 \begin{itemize}
 
 \item Stochastic optimization decisions are in general balanced: protect against ``bad" scenarios

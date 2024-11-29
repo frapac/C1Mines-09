@@ -1,0 +1,138 @@
+
+\begin{frame}{Dual Decomposition}
+  We remind the two-stage program:
+  \[
+    \left\{ \begin{array}{rll}
+        \min_x & c^\top x +\sum_{i=1}^N p_i Q(x,\xi_i) &\\
+  \mbox{s.t.} & Ax=b\,, \quad x\geq0\,,&
+  \end{array} \right.
+  \]
+  Reformulation:
+  \begin{equation*}
+    \left\{ \begin{array}{rll}
+        \min_x & \sum_{i=1}^N p_i \Big(c^\top x + Q(x,\xi_i)\Big) &\\
+  \mbox{s.t.} & Ax=b\,, \quad x\geq0\,,&
+  \end{array} \right.
+  \end{equation*}
+  or equivalently, using a splitted formulation:
+  \begin{equation*}
+    \left\{ \begin{array}{rll} \min_{\{x_i\}_i} & \sum_{i=1}^N p_i \Big(c^\top x_i + Q(x_i,\xi_i)\Big) &\\
+  \mbox{s.t.} & Ax_i=b\,, \quad x_i\geq0\,, \\
+              & x_i = \verm{\only<1>{x_j}\only<2>{\sum_{j=1}^N p_j x_j}} \quad \forall i=1, \cdots, N
+  \end{array} \right.
+  \end{equation*}
+\end{frame}
+
+\begin{frame}{Dualization of the coupling constraints}
+  By dualizing each coupling constraints with a multiplier $\verm{\lambda_i}$:
+  \begin{equation*}
+    \left\{ \begin{array}{rll} \min_{\{x_i\}_i} \max_{\verm{\lambda}} & \sum_{i=1}^N p_i \Big(c^\top x_i +
+        Q(x_i,\xi_i)  + \verm{\lambda_i} \big(x_i - \sum_{j=1}^N p_j x_j \big)\Big) \\
+  \mbox{s.t.} & Ax_i=b\,, \quad x_i\geq0\,,\quad \forall i =1,\cdots,N
+  \end{array} \right.
+  \end{equation*}
+  Note that:
+  \begin{equation*}
+    \begin{aligned}
+    \sum_{i=1}^N p_i \verm{\lambda_i} \big(x_i - \sum_{j=1}^N p_j x_j \big)
+    &= \sum_{i=1}^N p_i \verm{\lambda_i} x_i - \sum_{i=1}^N \sum_{j=1}^N p_i p_j \verm{\lambda_i} x_j \\
+    &= \sum_{i=1}^N p_i \verm{\lambda_i} x_i - \sum_{j=1}^N \sum_{i=1}^N \big( p_i \verm{\lambda_i} \big) p_j  x_j \\
+    &= \sum_{i=1}^N p_i \verm{\lambda_i} x_i - \sum_{j=1}^N \mathbb{E}(\verm{\lambda}) p_j  x_j \\
+    \end{aligned}
+  \end{equation*}
+  The problem is equivalent to
+  \begin{equation*}
+    \left\{ \begin{array}{rll} \min_{\{x_i\}_i} \max_{\verm{\lambda}} & \sum_{i=1}^N p_i \Big(c^\top x_i +
+          Q(x_i,\xi_i)  + \big(\verm{\lambda_i} - \verm{\mathbb{E}(\lambda)}\big) x_i \Big) \\
+  \mbox{s.t.} & Ax_i=b\,, \quad x_i\geq0\,,\quad \forall i =1,\cdots,N
+  \end{array} \right.
+  \end{equation*}
+
+\end{frame}
+
+\begin{frame}{Dual problem}
+  The dual problem reads
+  \begin{equation*}
+    \left\{ \begin{array}{rll} \max_{\verm{\lambda}}\min_{\{x_i\}_i}  & \sum_{i=1}^N p_i \Big(c^\top x_i +
+          Q(x_i,\xi_i)  + \big(\verm{\lambda_i} - \verm{\mathbb{E}(\lambda)}\big) x_i \Big) \\
+  \mbox{s.t.} & Ax_i=b\,, \quad x_i\geq0\,,\quad \forall i =1,\cdots,N
+  \end{array} \right.
+  \end{equation*}
+  For $\verm{\lambda_i}$ given, the inner problem decomposes in $N$ deterministic problems
+  \begin{equation*}
+    \begin{aligned}
+      \min_{x_i} \; & c^\top x_i + Q(x_i, \xi_i) + \big(\verm{\lambda_i} - \verm{\mathbb{E}(\lambda)}\big)x_i \\
+      \mbox{s.t.}~ & A x_i = b\, , \quad x_i \geq 0
+    \end{aligned}
+  \end{equation*}
+
+  \begin{block}{Price of information}
+    Any multiplier $\verm{\lambda}$ satisfying the KKT conditions of the
+    two-stage problem satisfies
+    \begin{equation*}
+      \verm{\mathbb{E}(\lambda) = 0}
+    \end{equation*}
+  \end{block}
+  Subproblem is equivalent to
+  \begin{equation*}
+    \begin{aligned}
+      \min_{x_i} \; & c^\top x_i + Q(x_i, \xi_i) + \verm{\lambda_i}x_i \\
+      \mbox{s.t.}~ & A x_i = b\, , \quad x_i \geq 0
+    \end{aligned}
+  \end{equation*}
+
+\end{frame}
+
+\begin{frame}{Dual decomposition algorithm}
+Set an initial multiplier $\lambda^0$ such that $\mathbb{E}(\lambda^0) = 0$
+  \begin{enumerate}
+    \item Solve for each scenario
+      \begin{equation*}
+        \begin{aligned}
+          \min_{x_i} \; & c^\top x_i + Q(x_i, \xi_i) + \verm{\lambda_i^k}x_i \\
+          \mbox{s.t.}~ & A x_i = b\, , \quad x_i \geq 0
+        \end{aligned}
+      \end{equation*}
+    \item Update the first-stage variable
+      \begin{equation*}
+        \overline{x}^{k+1} = \sum_{i=1}^N p_i x_i^{k+1}
+      \end{equation*}
+    \item Update the price of information as
+      \begin{equation*}
+        \lambda^{k+1}_i = \lambda^k_i + \rho (x_i^{k+1} - \overline{x}^{k+1})
+      \end{equation*}
+  \end{enumerate}
+
+
+\end{frame}
+
+\begin{frame}{Progressive Hedging algorithm}
+Set an initial multiplier $\lambda^0$ such that $\mathbb{E}(\lambda^0) = 0$
+  \begin{enumerate}
+    \item Solve for each scenario
+      \begin{equation*}
+        \begin{aligned}
+          \min_{x_i} \; & c^\top x_i + Q(x_i, \xi_i) + \verm{\lambda_i^k}x_i + \verm{\rho \|x_i - \overline{x}^k \|^2 }\\
+          \mbox{s.t.}~ & A x_i = b\, , \quad x_i \geq 0
+        \end{aligned}
+      \end{equation*}
+    \item Update the first-stage variable
+      \begin{equation*}
+        \overline{x}^{k+1} = \sum_{i=1}^N p_i x_i^{k+1}
+      \end{equation*}
+    \item Update the price of information as
+      \begin{equation*}
+        \lambda^{k+1}_i = \lambda^k_i + \rho (x_i^{k+1} - \overline{x}^{k+1})
+      \end{equation*}
+  \end{enumerate}
+
+  \begin{block}{Convergence}
+    Assume that for all $i=1, \cdots, N$, there exists $x_i$ such that $c^\top x_i + Q(x_i, \xi_i) < +\infty$
+    with $Ax_i = b$, $x_i \geq 0$. \\
+    Then the progressive hedging algorithm converges toward an optimal primal solution
+    and the price of information converges toward an optimal price of information
+  \end{block}
+
+\end{frame}
+
+
