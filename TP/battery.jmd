@@ -10,6 +10,18 @@ optimization modeler JuMP.
 - If you are new to the Julia language, we recommend the [following introduction](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_julia/).
 - If you are new to optimization modeler, we recommend the [following tutorial](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_JuMP/).
 
+Julia can be installed from [the official website](https://julialang.org/downloads).
+The source code and the data in this [git repository](https://github.com/frapac/C1Mines-09).
+
+This tutorial uses the packages Plots.jl (for plotting), JuMP.jl (for the optimization
+modeler) and HiGHS.jl (for the optimization solver). All three packages can be installed
+directly from Julia REPL using the installation mode (type `]` to activate it), using
+the command:
+```
+] add Plots, JuMP, HiGHS
+
+```
+
 The project is inspired by recent works on the optimal management
 of energy storage using Stochastic Dynamic Programming. In particular, we acknowledge
 the [following article](https://ieeexplore.ieee.org/abstract/document/9721005).
@@ -32,12 +44,13 @@ using the following code:
 
 ```julia
 using DelimitedFiles
+using Statistics
 using Plots
 price = readdlm("data/epex_price.txt")[:]
 
 plot(price, lw=2.0, color=:black, label="EPEX price")
 xlabel!("Hours")
-ylabel!("Energy price (€)")
+ylabel!("Energy price [€/MWh]")
 ```
 
 ---
@@ -52,8 +65,8 @@ We start by writing a mathematical model for our energy storage. We introduce
 the following parameters:
 - ``C > 0``: battery capacity [MWh]
 - ``P > 0``: maximum battery charge/discharge in one hour [MWh]
-- ``0 < η_p < 1``: charge efficiency
-- ``0 < η_d < 1``: discharge efficiency
+- ``0 < η_d < 1``: charge efficiency
+- ``0 < η_p < 1``: discharge efficiency
 - ``c \geq 0``: tax paid when injecting energy onto the network [€/MWh]
 Our decision variables are:
 - ``x_t``: State-of-Charge (SoC) of the battery at time ``t`` [MWh]
@@ -162,6 +175,12 @@ JuMP.optimize!(det_model)
 
 ---
 
+**Solution**
+```julia
+MOI.get(det_model, MOI.SimplexIterations())
+```
+
+
 The final objective is:
 ```julia
 JuMP.objective_value(det_model)
@@ -245,7 +264,7 @@ scenarios = generate_price_scenarios(markov, price, n_scenarios)
 plot(scenarios, lw=0.5, color=:black, legend=false)
 plot!(price, lw=5.0, color=:darkblue)
 xlabel!("Hours")
-ylabel!("Energy price (€)")
+ylabel!("Energy price [€/MWh]")
 
 ```
 
@@ -372,6 +391,44 @@ end
 
 ```
 
+The function `build_subproblem_dp` returns a JuMP model. It takes as input
+the battery's data, the current price, a discretization of the state and the future
+value function ``V_{t+1, j}``. In the following lines, we give as an example
+how to instantiate the model at time ``t=1``, for a grid with size `3`:
+```julia
+t = 1  # current time
+n_grid = 3
+# Grid
+xgrid = [0.0, 2.5, 5.0]
+# Future value function (set here arbitrarily to 0)
+Vp = [0.0, 0.0, 0.0]
+model = build_subproblem_dp(data, price[t], xgrid, Vp, HiGHS.Optimizer, n_grid)
+println(model)
+```
+
+The current state-of-charge
+is stored explicitly as a parameter in the model, with the name `x`. Using JuMP's syntax,
+we can access a reference to this parameter by:
+```julia
+model[:x]
+
+```
+Evaluating the cost-to-go ``Q_{t, j}(x)`` at a given ``x`` requires passing
+the current value of ``x`` to the JuMP model. This translates to the following code:
+```julia
+x_current = 2.0
+JuMP.fix(model[:x], x_current; force=true)
+
+```
+Once we have fixed the value of ``x``, querying the value of ``Q_{t, j}(x)`` simply amounts
+to solve the LP using HiGHS:
+```julia
+JuMP.optimize!(model)
+Q_x = JuMP.objective_value(model)
+
+```
+
+
 ---
 **Question 7.** Use the function `build_subproblem_dp` to implement the
 Stochastic Dynamic Programming algorithm. We give right after a skeleton for the implementation.
@@ -418,7 +475,21 @@ function solve_dp(
     Q = zeros(T, Nd, n_grid)
 
     for t in reverse(1:T)
-        # TODO
+        # Compute Q-functions recursively
+        for j in 1:Nd
+            price = avg_price[t] * exp(markov.x[j])
+            dp_model = build_subproblem_dp(data, price, xgrids, V[t+1, j, :], optimizer, n_grid)
+            for i in 1:n_grid
+                # Set initial condition
+                JuMP.fix.(dp_model[:x], xgrids[i])
+                JuMP.optimize!(dp_model)
+                Q[t, j, i] = JuMP.objective_value(dp_model)
+            end
+        end
+        # Update value function
+        for i in 1:Nd, j in 1:Nd, k in 1:n_grid
+            V[t, i, k] += markov.proba[i, j] * Q[t, j, k]
+        end
     end
 
     return V
@@ -433,6 +504,27 @@ at time ``t ∈ \{1, 25, 49, 72 \}``, at the lattice ``n=1``.
 
 ---
 
+**Solution:**
+```julia
+N = 4
+markov = import_markov_chain(N)
+d = 101
+V = solve_dp(data, markov, price; n_grid=d)
+
+solution = get_objective_value(V)
+```
+
+```julia
+xgrids = collect(range(0.0, data.C, d))
+p = plot(lw=3.0)
+for t in [1, 25, 49, 72]
+    plot!(xgrids, V[t, 1, :], label="V$(t)")
+end
+xlabel!("Battery SoC [MWh]")
+ylabel!("Future cost [€]")
+p
+```
+
 
 ---
 **Question 9.** Set ``N = 4``. How does the numerical objective computed by SDP
@@ -441,11 +533,66 @@ What is the impact of the discretization on the solution time?
 
 ---
 
+**Solution:**
+
+```julia
+N = 4
+markov = import_markov_chain(N)
+discretization_sizes = [11, 51, 101, 501, 1001]
+exec_time = zeros(length(discretization_sizes))
+solution = zeros(length(discretization_sizes))
+
+for (k, n_grid) in enumerate(discretization_sizes)
+    res = @timed solve_dp(data, markov, price; n_grid=n_grid)
+    exec_time[k] = res.time
+    solution[k] = get_objective_value(res.value)
+end
+
+```
+
+
+```julia
+plot(1:length(discretization_sizes), solution, marker=:+, xticks=(1:length(discretization_sizes), discretization_sizes))
+xlabel!("Discretization size")
+ylabel!("Solution (€)")
+
+```
+
+```julia
+plot(discretization_sizes, exec_time, scale=:log10, marker=:+)
+xlabel!("Discretization d")
+ylabel!("Execution time (seconds)")
+```
+
+
 ---
 **Question 10.** Set ``d = 101``.
 Plot the evolution of the objective computed by SDP for ``N ∈ \{4, 8, 16, 32\}``.
 
 ---
+
+**Solution.**
+```julia
+d = 101
+n_lattices = [4, 8, 16, 32]
+exec_time = zeros(length(n_lattices))
+solution = zeros(length(n_lattices))
+
+for (k, N) in enumerate(n_lattices)
+    markov = import_markov_chain(N)
+    res = @timed solve_dp(data, markov, price; n_grid=d)
+    exec_time[k] = res.time
+    solution[k] = get_objective_value(res.value)
+end
+```
+
+```julia
+fig = plot(1:length(n_lattices), solution, marker=:+, markersize=5, xticks=(1:length(n_lattices), n_lattices))
+ylabel!("Solution (€)")
+xlabel!("Number N of Markov chain lattices")
+```
+
+
 
 ---
 **Question 11.** Let ``\overline{λ} = (\overline{λ}_1, ⋯, \overline{λ}_T)`` be the average price along time.
@@ -454,12 +601,38 @@ Show that ``v(\overline{λ})`` is an upper bound for the optimal value.
 
 ---
 
+**Solution.**
+```julia
+UB = JuMP.objective_value(det_model)
+```
+
+
 ---
 **Question 12.** Let ``λ^i = (λ^i_1, ⋯, λ^i_T) ∈ \mathbb{R}^T`` be a random realization of the price process ``\{λ_t(ω)\}_t``.
 Prove that for a given ``k``, the value ``\frac{1}{k} ∑_{i=1}^k v(λ^i)`` is a statistical lower-bound
 for the optimal value. Give a confidence interval. Compute numerically the upper-bound for ``N=8``.
 
 ---
+
+**Solution.**
+```julia
+N = 8
+markov = import_markov_chain(N)
+
+k = 1000
+vals = zeros(k)
+for i in 1:k
+    scenario = generate_price_scenarios(markov, price, 1)[:]
+    model = build_deterministic_model(data, scenario)
+    JuMP.set_optimizer(model, HiGHS.Optimizer)
+    JuMP.set_silent(model)
+    JuMP.optimize!(model)
+    vals[i] = JuMP.objective_value(model)
+end
+
+LB = sum(vals) / k
+
+```
 
 ### Simulating optimal policies
 We want to implement a control policy for the battery. At each time
@@ -537,6 +710,28 @@ of `NaivePolicy` using the function `simulate_policy`. Plot the histogram of the
 
 ---
 
+**Solution.**
+```julia
+nscen = 1000
+scenarios = generate_price_scenarios(markov, price, nscen)
+pol = NaivePolicy(data, price)
+naive_cost, naive_soc = simulate_policy(pol, scenarios, data)
+
+sum(naive_cost) / nscen
+
+```
+
+```julia
+histogram(naive_cost)
+xlabel!("Cost [€]")
+```
+
+```julia
+plot(naive_soc[:, 1:10], lw=2.0, color=:black, legend=false)
+xlabel!("Time [h]")
+ylabel!("SoC [MWh]")
+```
+
 We write a policy that uses the value functions computed by the SDP algorithm
 to determine whether to charge/discharge the battery. The code is given below.
 
@@ -586,6 +781,34 @@ Comment the results.
 
 ---
 
+**Solution.**
+```julia
+
+V = solve_dp(data, markov, price; n_grid=101)
+pol = DPPolicy(data, price, markov, V)
+dp_cost, dp_soc = simulate_policy(pol, scenarios, data)
+
+mean_cost = sum(dp_cost) / nscen
+
+```
+
+```julia
+histogram(dp_cost)
+xlabel!("Cost [€]")
+
+```
+```julia
+plot(dp_soc[:, 1:10], lw=2.0, color=:black, legend=false)
+xlabel!("Time [h]")
+ylabel!("SoC [MWh]")
+
+```
+```julia
+dp_sol = get_objective_value(V)
+
+(LB, dp_sol, mean_cost)
+
+```
 
 
 # Part III: Expliciting the solution
@@ -635,6 +858,23 @@ the future sensitivity ``v_{t+1, j}(x_+) \in \partial V_{t+1, j}(x_+)``.
 
 ---
 
+**Solution:**
+Using the Lagrangian, the KKT conditions of the LP problem writes out,
+for ``v_{t+1,j}(x_+) \in \partial V_{t+1,j}(x_+)``:
+```math
+\begin{aligned}
+ & v_{t+1,j}(x_+) - \pi = 0 \\
+ & \lambda_{t, j} - \underline{\beta} + \overline{\beta} + \eta_d \pi = 0 \\
+ & -\lambda_{t, j} + c - \underline{\gamma} + \overline{\gamma} - \frac{1}{\eta_p} \pi = 0 \\
+ & x_+ - x + \frac{1}{\eta_p} p - \eta_d b = 0 \\
+ & 0 \leq b \perp \underline{\beta} \geq 0 \\
+ & 0 \leq (\overline{b}(x) - b) \perp \overline{\beta} \geq 0 \\
+ & 0 \leq p \perp \underline{\gamma} \geq 0 \\
+ & 0 \leq (\overline{p}(x) - p) \perp \overline{\gamma} \geq 0 \\
+\end{aligned}
+
+```
+
 
 ---
 **Question 16.** Suppose that for all ``t``, the price is non-negative: ``λ_t ≥ 0``. Is it
@@ -642,6 +882,27 @@ a reasonable assumption? Under this assumption, prove that we cannot charge and 
 (or ``p × b = 0``: we say that ``p`` and ``b`` are *complementary* to each other).
 
 ---
+
+**Solution:**
+We suppose that both ``p > 0`` and ``b > 0``.
+According to the KKT conditions explicited in Question 15,
+the complementarity conditions
+imply ``\underline{\beta} = 0``, ``\overline{\beta} > 0`` and
+``\underline{\gamma} = 0``, ``\overline{\gamma} > 0``.
+We deduce:
+```math
+\pi = \frac{1}{\eta_d} \Big( -\lambda_{t, j} - \overline{\beta} \Big) =
+\eta_p \Big(-\lambda_{t, j} + c + \overline{\gamma} \Big)
+
+```
+or equivalently,
+```math
+(1- \eta_p \eta_d) \lambda_{t, j} = -\eta_p \eta_d c - \eta_p \eta_d \overline{\gamma} - \overline{\beta}
+
+```
+The left-hand-side is positive (as ``\eta_p \eta_d < 1``) and the right-hand-side is negative,
+leading to a contradiction. Hence we cannot have both ``p > 0`` and ``b > 0``, concluding
+the proof.
 
 
 ---
@@ -654,6 +915,133 @@ and the sensitivity ``v_{t+1, j}(x_+)``.
 
 ---
 
+**Solution:** According to Question 16, we cannot have both ``p > 0`` and ``b >0``. As ``(b, p) \geq 0``,
+we obtain the three alternatives listed above.  We analyze the three cases one by one.
+
+Analyzing the KKT conditions, we get:
+```math
+  \overline{\beta}- \underline{\beta} =  - \eta_d \pi - \lambda_{t, j} \; , \quad
+  \overline{\gamma}- \underline{\gamma}  = \frac{1}{\eta_p} \pi - c +\lambda_{t, j}
+```
+As we have both ``(\underline{\gamma}, \overline{\gamma}) \geq 0``
+and ``(\underline{\beta}, \overline{\beta}) \geq 0``, we deduce that
+```math
+\left\{
+\begin{aligned}
+    & \overline{\beta} = \max\{0, -\eta_d \pi - \lambda_{t, j} \} \; , \\
+    & \underline{\beta} = \max\{0, \eta_d \pi + \lambda_{t, j} \} \; , \\
+    & \overline{\gamma} = \max\{0, \frac{1}{\eta_p} \pi - c + \lambda_{t, j}\} \; , \\
+    & \underline{\gamma} = \max\{0, -\frac{1}{\eta_p} \pi + c - \lambda_{t, j} \}\; .
+\end{aligned}
+\right.
+
+```
+The evolution of the bound multipliers as function of ``\pi`` is depicted in the following figure.
+
+```julia; echo=false
+using LaTeXStrings
+
+λ = 10.0
+f1 = x -> (1/data.eta_p) * x - data.c + λ
+f2 = x -> -λ - data.eta_d * x
+x = -15:.1:-5
+gammap = max.(0.0, f1.(x))
+gamman = max.(0.0, .-f1.(x))
+betap = max.(0.0, f2.(x))
+betan = max.(0.0, .-f2.(x))
+
+xx1 = data.eta_p * (data.c - λ)
+xx2 = - 1/data.eta_d * λ
+plot(
+    yticks=[(.0), (.0)],
+    xticks=([xx1, xx2, -5], [L"\eta_p ( c - \lambda)", L"-\lambda / \eta_d", L"\pi"]),
+    fontsize=20,
+    grid=nothing,
+)
+plot!(x, gammap, lw=4.0, color="red", label=L"\gamma_+", linestyle=:solid)
+plot!(x, gamman, lw=4.0, color="blue", label=L"\gamma_-", linestyle=:solid)
+
+plot!(x, betap, lw=4.0, color="green", label=L"\beta_+", linestyle=:dot)
+plot!(x, betan, lw=4.0, color="blue", label=L"\beta_-", linestyle=:dot)
+
+plot!([-15, xx2], [0.0, 0.0], color=:green, alpha=0.3, fillrange=[4.0, 4.0], label="Charge")
+plot!([xx2, xx1], [0.0, 0.0], color=:purple, alpha=0.3, fillrange=[4.0, 4.0], label="Nothing")
+plot!([xx1, -5], [0.0, 0.0], color=:red, alpha=0.3, fillrange=[4.0, 4.0], label="Discharge")
+
+xlims!(-15, -5)
+ylims!(-0.1, 4.0)
+
+```
+
+We observe that the bound multipliers are *piecewise affine*.
+Depending on the value of ``\pi = v_{t+1, j}(x_+)``, we get the following situations
+in the dual space:
+- if ``\pi \geq \eta_p (c - \lambda_{t, j})``, we have ``(\overline{\gamma}, \underline{\beta}) \geq 0`` and ``(\underline{\gamma}, \overline{\beta}) = 0`` impying ``p \geq 0`` and ``b = 0``: the battery is **discharging**.
+- if ``-\frac{1}{\eta_d} \lambda_{t, j} < \pi < \eta_p (c - \lambda_{t, j})``, we have ``(\underline{\gamma}, \underline{\beta}) > 0``, implying ``p = 0`` and ``b = 0``: the SoC remains **constant**.
+- if ``\pi \leq -\frac{1}{\eta_d} \lambda_{t, j}``, we have ``(\underline{\gamma}, \overline{\beta}) \geq 0`` and ``(\overline{\gamma}, \underline{\beta}) = 0`` impying ``p = 0`` and ``b \geq 0``: the battery is **charging**.
+
+The three previous conditions depend on the price ``\lambda_{t, j}``. We depict in the
+following figure where do the three situations occur as function of ``\lambda_{t, j}`` and ``\pi``.
+
+```julia; echo=false
+lambda = -10:1:20
+f1 = x -> data.eta_p * (data.c - x)
+f2 = x -> -(1.0 / data.eta_d) * x
+plot(framestyle=:origin, yticks=[(0.0), (0.0)], xticks=[(0.0), (0.0)])
+plot!(lambda, f1.(lambda), color=:black, lw=3.0, label=nothing)
+plot!(lambda, f2.(lambda), color=:black, lw=3.0, label=nothing)
+
+LB, UB = -22.0, 10.0
+
+xx = 0:1:20
+plot!(xx, f2.(xx), color=:purple, alpha=0.3, fillrange=f1.(xx), label="Nothing")
+plot!(xx, f1.(xx), color=:red, alpha=0.3, fillrange=fill(UB, 21), label="Discharge")
+plot!(xx, fill(LB, 21), color=:green, alpha=0.3, fillrange=f2.(xx), label="Charge")
+
+xx = -10:1:0
+plot!(xx, fill(LB, 11), fillrange = fill(UB, 11), alpha=.1, color=:black, label="Infeasible")
+
+annotate!(
+    [1.8, 15.5, 10, 0.7, 20],
+    [data.eta_p * data.c + 1.0, f1(10), f1(15), UB-1, 1],
+    [
+        text(L"\eta_p c", :black, :right, 10),
+        text(L"\pi = \eta_p (c - \lambda)", :black, :right, 10),
+        text(L"\pi = -\eta_d \lambda", :black, :right, 10),
+        text(L"\pi", :black, :right, 13),
+        text(L"\lambda", :black, :right, 13),
+    ],
+    fontsize=5,
+)
+xlims!(-10.0, 20.0)
+ylims!(LB, UB)
+
+```
+
+According to the KKT conditions, we have ``\pi = v_{t+1, j}(x_+)``.
+The next SoC ``x_+`` takes values in the interval ``[x - \frac{1}{\eta_p}\overline{p}(x), x+ \eta_d \overline{b}(x)]``.
+The value function ``V_{t+1, j}`` is convex, hence ``v_{t+1, j}(x_+)`` is non-decreasing:
+```math
+v_{t+1, j}(x - \frac{1}{\eta_p}\overline{p}(x)) \leq
+v_{t+1, j}(x) \leq
+v_{t+1, j}(x + \eta_d\overline{b}(x))
+
+```
+We note ``\pi_+ = v_{t+1, j}(x + \eta_d \overline{b}(x))``,
+``\pi_0 = v_{t+1, j}(x)`` and
+``\pi_- = v_{t+1, j}(x - \frac{1}{\eta_p}\overline{p}(x))``.
+Using the monotonicity of ``v_{t+1, j}(\cdot)``, we deduce that only one of the five conditions can occur:
+
+| Condition | Policy ``(b, p)`` |
+| --- | --- |
+| ``\pi_+ \leq -\frac{1}{\eta_d}\lambda_{t, j}`` | `` (\overline{b}(x), 0)`` |
+| ``\pi_0 \leq -\frac{1}{\eta_d}\lambda_{t, j} \leq \pi_+`` | `` \big((\pi^{-1}(-1/\eta_d \lambda_{t,j}) - x)/\eta_d, 0\big)`` |
+| ``-\frac{1}{\eta_d} \lambda_{t, j} \leq \pi_0 \leq \eta_p (c - \lambda_{t, j})`` | `` (0, 0)`` |
+| ``\pi_-  \leq \eta_p (c - \lambda_{t, j})\leq \pi_0`` | `` (0, (\pi^{-1}(\eta_p(c - \lambda_{t,j}) - x) \times \eta_p)`` |
+| `` \eta_p (c - \lambda_{t, j})\leq \pi_-`` | `` (0, \overline{p}(x))`` |
+
+
+
 
 ---
 **Question 18.** Show that the sensitivity ``\{ v_{t, i} \}_t`` satisfies a set of
@@ -663,11 +1051,185 @@ a LP solver.
 
 ---
 
+**Solution:**
+Let ``q_{t, j}(x) \in \partial Q_{t, j}(x)``.
+As ``V_{t, i} = \sum_{j=1}^N p_{ij} Q_{t, j}``, we deduce the recursive
+equation on the sensitivity ``v_{t, i}``:
+```math
+v_{t, j}(x) = \sum_{j=1}^N p_{ij} \times q_{t, j}(x)
+
+```
+
+Using Question 15, we can compute the sensitivity ``q_{t, j}(x)`` analytically:
+```math
+q_{t, j}(x) = \pi_{j} + \frac{1}{\eta_d} \overline{\beta} - \eta_p \overline{\gamma}
+
+```
+where ``\pi_{j}`` is the optimal multiplier associated to the dynamics constraint.
+The KKT conditions give
+```math
+\pi_j = v_{t+1, j}(x_{j+})
+
+```
+where ``x_{j+}`` is the future state solution of the Bellman operator.
+
 ---
 **Question 19.** Implement the new algorithm and show it returns the correct solution.
 Compare its performance with the SDP algorithm implemented previously in the function `solve_dp`.
 
 ---
+
+**Solution.**
+```julia
+
+"""
+Return inverse v⁻¹(y) where ``v`` is given as a vector.
+Complexity O(n).
+"""
+function inverse_mapping(v, y)
+    n = length(v)
+    xk = 0
+    dk = Inf
+    for k in 1:n
+        d = abs(v[k] - y)
+        if d <= dk
+            xk = k
+            dk = d
+        end
+    end
+    return xk
+end
+
+function fast_dp(
+    data::BatteryData,
+    markov::StationaryMarkovChain,
+    avg_price::Vector;
+    optimizer=HiGHS.Optimizer,
+    n_grid=11,
+)
+    T = length(avg_price)
+    horizon = T + 1
+
+    Nd = length(markov.x)
+
+    xmin = 0.0
+    xmax = data.C
+    xgrids = collect(range(xmin, xmax, n_grid))
+
+    dv = zeros(horizon, Nd, n_grid)
+    dq = zeros(T, Nd, n_grid)
+
+    V = zeros(horizon, Nd, n_grid)
+    Q = zeros(T, Nd, n_grid)
+
+    for t in reverse(1:T)
+        # Compute Q-functions recursively
+        for j in 1:Nd
+            price = avg_price[t] * exp(markov.x[j])
+            for i in 1:n_grid
+                # Bounds
+                x = xgrids[i]
+                pmax = min(data.P, data.eta_p * x)
+                bmax = min(data.P, (data.C - x) / data.eta_d)
+
+                # case 1: we charge the battery as much as we can
+                xp1 = x + data.eta_d * bmax
+                c1 = round(Int, (xp1 / xmax) * (n_grid-1))  + 1
+                # case 2: we let the battery as it is
+                xp2 = x
+                c2 = round(Int, (xp2 / xmax) * (n_grid-1))  + 1
+                # case 3: we discharge the battery as much as we can
+                xp3 = max(x - 1.0 / data.eta_p * pmax, 0.0)
+                c3 = round(Int, (xp3 / xmax) * (n_grid-1))  + 1
+
+                # Switch conditions
+                if price <= -data.eta_d * dv[t+1, j, c1]
+                    if bmax == data.P
+                        dq[t, j, i] = dv[t+1, j, c1]
+                    else
+                        β = -price - data.eta_d * dv[t+1, j, c1]
+                        dq[t, j, i] = dv[t+1, j, c1] + β / data.eta_d
+                    end
+                    (b, p) = (bmax, 0.0)
+                    kp = c1
+                elseif -data.eta_d * dv[t+1, j, c1] < price <= -data.eta_d * dv[t+1, j, c2]
+                    g =  -price / data.eta_d
+                    dq[t, j, i] = g
+                    kp = inverse_mapping(dv[t+1, j, :], g)
+                    xp = xgrids[kp]
+                    (b, p) = ((xp - x) / data.eta_d, 0.0)
+                elseif -data.eta_d * dv[t+1, j, c2] < price <= -1.0/data.eta_p * dv[t+1, j, c2] + data.c
+                    dq[t, j, i] = dv[t+1, j, c2]
+                    (b, p) = (0.0, 0.0)
+                    kp = c2
+                elseif -1.0/data.eta_p * dv[t+1, j, c2] + data.c < price <= -1.0/data.eta_p * dv[t+1, j, c3] + data.c
+                    g = -(price - data.c) * data.eta_p
+                    dq[t, j, i] = g
+                    kp = inverse_mapping(dv[t+1, j, :], g)
+                    xp = xgrids[kp]
+                    (b, p) = (0.0, (x - xp) * data.eta_p)
+                elseif -1.0/data.eta_p * dv[t+1, j, c3] + data.c <= price
+                    if pmax == data.P
+                        dq[t, j, i] = dv[t+1, j, c3]
+                    else
+                        γ = 1.0/data.eta_p * dv[t+1, j, c3] + price - data.c
+                        dq[t, j, i] = dv[t+1, j, c3] - data.eta_p * γ
+                    end
+                    (b, p) = (0.0, pmax)
+                    kp = c3
+                end
+
+                Q[t, j, i] = price * (b - p) + data.c * p + V[t+1, j, kp]
+            end
+        end
+        # Update value function
+        for i in 1:Nd, j in 1:Nd, k in 1:n_grid
+            V[t, i, k] += markov.proba[i, j] * Q[t, j, k]
+            dv[t, i, k] += markov.proba[i, j] * dq[t, j, k]
+        end
+    end
+
+    return V, dv
+end
+
+```
+
+We solve the Dynamic Programming equations using `fast_dp`:
+```julia
+V, dv = fast_dp(data, markov, price; n_grid=101)
+
+get_objective_value(V)
+```
+
+We observe the objective is slightly off. This is caused by
+the current discretization: we don't interpolate the value of the
+value function ``V_{t+1, j}(x)`` if ``x`` is not on the discretization grid.
+We get better results if we increase the discretization size:
+```julia
+V, dv = fast_dp(data, markov, price; n_grid=1001)
+
+get_objective_value(V)
+```
+
+```julia
+discretization_sizes = [101, 201, 501, 1001]
+exec_time_dp1 = zeros(length(discretization_sizes))
+exec_time_dp2 = zeros(length(discretization_sizes))
+
+for (k, n_grid) in enumerate(discretization_sizes)
+    res = @timed solve_dp(data, markov, price; n_grid=n_grid)
+    exec_time_dp1[k] = res.time
+
+    res = @timed fast_dp(data, markov, price; n_grid=n_grid)
+    exec_time_dp2[k] = res.time
+end
+
+plot(discretization_sizes, exec_time_dp1, scale=:log10, marker=:+, label="Classical DP")
+plot!(discretization_sizes, exec_time_dp2, scale=:log10, marker=:+, label="Fast DP")
+xlabel!("Discretization d")
+ylabel!("Execution time (seconds)")
+
+```
 
 ---
 **Question 20.** Write the optimal policy. Plot the value of ``b`` and ``p`` w.r.t.
@@ -675,4 +1237,100 @@ the price ``\lambda_{t, j}``. Is the policy (i) linear? (ii) affine ? (iii) piec
 Explain why ``v_{t+1, j}(x_+)`` is called the *value of the stock*.
 
 ---
+
+**Solution.**
+
+```julia
+
+struct FastDPPolicy
+    data::BatteryData
+    price::Vector{Float64}
+    markov::StationaryMarkovChain
+    dv::Array{Float64, 3}
+end
+
+function FastDPPolicy(data, price, markov, dv)
+    T = length(price)
+    Nd = size(V, 2)
+    n_grid = size(V, 3)
+    return DPPolicy(data, price, markov, models)
+end
+
+function (pol::FastDPPolicy)(t::Int, x::Float64, λ::Float64)
+    n_grid = size(pol.dv, 3)
+    xmin, xmax = 0.0, data.C
+    # Find nearest position in Markov chain
+    avg_price = pol.price[t]
+    Δp = log(λ / avg_price)
+    # Find nearest positition
+    ind = _project(pol.markov.x, Δp)
+
+    pmax = min(data.P, data.eta_p * x)
+    bmax = min(data.P, (data.C - x) / data.eta_d)
+
+    # case 1: we charge the battery as much as we can
+    xp1 = x + data.eta_d * bmax
+    c1 = round(Int, (xp1 / xmax) * (n_grid-1))  + 1
+    # case 2: we let the battery as it is
+    xp2 = x
+    c2 = round(Int, (xp2 / xmax) * (n_grid-1))  + 1
+    # case 3: we discharge the battery as much as we can
+    xp3 = max(x - 1.0 / data.eta_p * pmax, 0.0)
+    c3 = round(Int, (xp3 / xmax) * (n_grid-1))  + 1
+
+    # Switch conditions
+    if λ <= -data.eta_d * pol.dv[t+1, ind, c1]
+        (b, p) = (bmax, 0.0)
+    elseif -data.eta_d * pol.dv[t+1, ind, c1] < λ <= -data.eta_d * pol.dv[t+1, ind, c2]
+        g =  -λ / data.eta_d
+        kp = inverse_mapping(pol.dv[t+1, ind, :], g)
+        xp = xmin + ((kp-1) / (n_grid-1)) * (xmax - xmin)
+        (b, p) = ((xp - x) / data.eta_d, 0.0)
+    elseif -data.eta_d * pol.dv[t+1, ind, c2] < λ <= -1.0/data.eta_p * pol.dv[t+1, ind, c2] + data.c
+        (b, p) = (0.0, 0.0)
+    elseif -1.0/data.eta_p * pol.dv[t+1, ind, c2] + data.c < λ <= -1.0/data.eta_p * pol.dv[t+1, ind, c3] + data.c
+        g = -(λ - data.c) * data.eta_p
+        kp = inverse_mapping(pol.dv[t+1, ind, :], g)
+        xp = xmin + ((kp-1) / (n_grid-1)) * (xmax - xmin)
+        (b, p) = (0.0, (x - xp) * data.eta_p)
+    elseif -1.0/data.eta_p * pol.dv[t+1, ind, c3] + data.c <= λ
+        (b, p) = (0.0, pmax)
+    end
+
+    return (b, p)
+end
+
+pol = FastDPPolicy(data, price, markov, dv)
+nscen = 10000
+scen = generate_price_scenarios(markov, price, nscen)
+fcost, fx = @time simulate_policy(pol, scen, data)
+
+histogram(fcost)
+xlabel!("Cost [€]")
+
+```
+
+We now look at the policy at different time `t`.
+
+```julia
+xgrids = 0.0:0.01:data.C
+Nd = length(xgrids)
+
+t = 20
+b_vals = zeros(Nd)
+p_vals = zeros(Nd)
+for (k, x) in enumerate(xgrids)
+    (b, p) = pol(t, x, price[t])
+    b_vals[k] = b
+    p_vals[k] = p
+end
+
+plot()
+plot!(xgrids, b_vals, label="charge")
+plot!(xgrids, p_vals, label="discharge")
+
+xlabel!("SoC at time t [MWh]")
+ylabel!("Energy [MWh]")
+
+```
 

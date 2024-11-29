@@ -6,8 +6,8 @@ end
 
 function import_markov_chain(Nd)
     return StationaryMarkovChain(
-        readdlm("data/markov_support_$(Nd).txt")[:],
-        readdlm("data/markov_weights_$(Nd).txt"),
+        readdlm(joinpath(@__DIR__, "data", "markov_support_$(Nd).txt"))[:],
+        readdlm(joinpath(@__DIR__, "data", "markov_weights_$(Nd).txt")),
     )
 end
 
@@ -65,4 +65,8 @@ function generate_price_scenarios(
     return w
 end
 
+function get_objective_value(V::Array{Float64, 3})
+    N = size(V, 2)
+    return sum(V[1, :, 1]) / N
+end
 
