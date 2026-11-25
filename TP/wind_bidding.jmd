@@ -1,0 +1,536 @@
+---
+title : Day-ahead bidding of a wind farm
+author : François Pacaud
+date : November 2026
+---
+
+# Motivation
+This project is a sequel to the tutorial on the optimal management of an energy storage.
+It uses the same tools: the language Julia, the modeler JuMP and the solver HiGHS.
+```
+] add Plots, JuMP, HiGHS
+```
+
+A wind producer sells its energy on the *day-ahead market*. Every day before noon,
+it must commit to the quantity of energy it will deliver during each hour of the
+following day. At that time, the wind production is not known: it is only *forecast*.
+The next day, any deviation between the committed quantity and the actual production
+is settled on the *balancing market* at an unfavorable price:
+- If the producer delivers more than committed (*surplus*), the extra energy is paid less than the day-ahead price.
+- If the producer delivers less than committed (*deficit*), the missing energy is charged more than the day-ahead price.
+
+This is a two-stage decision problem:
+1. **First stage (here-and-now):** choose the day-ahead bids, before the wind is known.
+2. **Second stage (wait-and-see):** observe the wind and settle the imbalances.
+
+# Introduction
+
+### Prices
+We use the day-ahead prices from the EPEX spot market already used in the battery tutorial.
+The bids are placed for the first day only (``T = 24`` hours).
+
+```julia
+using DelimitedFiles
+using Statistics
+using Random
+using Plots
+
+T = 24
+λ = readdlm("data/epex_price.txt")[1:T]
+```
+
+We assume a two-price imbalance settlement: a surplus is paid ``λ^+_t = α^+ λ_t``
+and a deficit is charged ``λ^-_t = α^- λ_t``, with ``0 < α^+ < 1 < α^-``.
+
+```julia
+include("wind.jl")
+λp, λm = imbalance_prices(λ; α_plus=0.8, α_minus=1.3)
+
+plot(λ, lw=2.0, color=:black, label="day-ahead λ")
+plot!(λp, lw=1.0, ls=:dash, color=:darkgreen, label="surplus λ⁺")
+plot!(λm, lw=1.0, ls=:dash, color=:darkred, label="deficit λ⁻")
+xlabel!("Hours")
+ylabel!("Price [€/MWh]")
+```
+
+### Wind production
+We consider a wind farm with capacity ``\overline{W} = 10`` MW. The production depends
+on the wind speed ``v`` through the *power curve* of the turbines:
+
+```julia
+farm = WindFarm(10.0)
+plot(0:0.1:30, v -> power_curve(farm, v), lw=2.0, color=:black, label="")
+xlabel!("Wind speed [m/s]")
+ylabel!("Power [MW]")
+```
+
+---
+**Question 1.** Comment the power curve. What are the cut-in, rated and cut-out speeds?
+Why does the production drop to zero above 25 m/s?
+
+---
+
+**Solution.**
+Below the cut-in speed (3 m/s) the turbines do not turn. Between 3 and 12 m/s the power grows like
+the cube of the wind speed (the kinetic energy flux is proportional to ``v^3``). Above the
+rated speed (12 m/s) the blades are pitched to keep the power at its nominal value. Above
+the cut-out speed (25 m/s) the turbines are stopped to protect them from mechanical damage.
+
+The forecaster provides a forecast ``\overline{v}_t`` of the wind speed. The realized speed is
+``v_t = \overline{v}_t + ε_t``, where the forecast error ``ε_t`` follows an
+auto-regressive process:
+```math
+ε_t = ρ \, ε_{t-1} + σ \, η_t \; , \quad η_t \sim \mathcal{N}(0, 1) \; , \quad ε_0 = 0 \; .
+```
+The realized production is ``w_t = φ(v_t)``, with ``φ`` the power curve. We sample
+scenarios of the wind production with the function `generate_wind_scenarios`:
+
+```julia
+v_forecast = wind_speed_forecast(T)
+w_forecast = power_curve.(Ref(farm), v_forecast)
+
+wind = generate_wind_scenarios(farm, v_forecast, 100; seed=1)
+
+plot(wind, lw=0.5, color=:gray, legend=false)
+plot!(w_forecast, lw=4.0, color=:darkblue)
+xlabel!("Hours")
+ylabel!("Wind production [MW]")
+```
+
+---
+**Question 2.** Comment the scenarios. How does the spread evolve with the lead time? Why?
+Compare the forecast production ``φ(\overline{v}_t)`` with the average production ``\mathbb{E}[φ(v_t)]``
+(estimate it on 10,000 scenarios). Explain the difference.
+
+---
+
+**Solution.**
+The variance of ``ε_t`` is ``σ^2 (1 - ρ^{2t}) / (1 - ρ^2)``: it is zero at the gate closure and grows
+with the lead time, converging to ``σ^2 / (1 - ρ^2)``. The spread is also smaller when the production
+is close to ``0`` or ``\overline{W}``, where the power curve is flat.
+```julia
+wind_large = generate_wind_scenarios(farm, v_forecast, 10_000; seed=2)
+w_mean = vec(mean(wind_large, dims=2))
+plot(w_forecast, lw=2.0, color=:darkblue, label="φ(E[v])")
+plot!(w_mean, lw=2.0, color=:darkred, label="E[φ(v)]")
+xlabel!("Hours")
+ylabel!("Wind production [MW]")
+```
+The power curve is nonlinear: it is convex at low speed and concave near the rated speed.
+By Jensen's inequality, ``\mathbb{E}[φ(v)] ≥ φ(\mathbb{E}[v])`` where ``φ`` is convex,
+and ``\mathbb{E}[φ(v)] ≤ φ(\mathbb{E}[v])`` where ``φ`` is concave. Forecasting the speed is
+not the same as forecasting the power.
+
+# Part I: Deterministic bidding
+We denote by ``x_t ∈ [0, \overline{W}]`` the energy bid on the day-ahead market for hour ``t``.
+Given a realization ``w_t`` of the wind, the producer delivers ``y_t ≤ w_t`` (``w_t - y_t``
+is curtailed) and the revenue for hour ``t`` is
+```math
+λ_t x_t + λ^+_t \, (y_t - x_t)^+ - λ^-_t \, (x_t - y_t)^+ \; .
+```
+As the prices are positive, it is never profitable to curtail: we can set ``y_t = w_t``.
+The following function evaluates the revenue of a bid ``x`` on a set of scenarios:
+
+```julia
+"""
+    evaluate_bid(x, λ, λp, λm, wind)
+
+Return the revenue [€] of the bid `x` on each scenario of `wind`
+(matrix of dimension `(T, n_scenarios)`).
+"""
+function evaluate_bid(x::Vector, λ::Vector, λp::Vector, λm::Vector, wind::Matrix)
+    T, nscen = size(wind)
+    revenue = zeros(nscen)
+    for k in 1:nscen, t in 1:T
+        surplus = max(wind[t, k] - x[t], 0.0)
+        deficit = max(x[t] - wind[t, k], 0.0)
+        revenue[k] += λ[t] * x[t] + λp[t] * surplus - λm[t] * deficit
+    end
+    return revenue
+end
+```
+
+---
+**Question 3.** Suppose the producer knows the future wind production ``w``. What is the
+optimal bid? What is the corresponding revenue?
+
+---
+
+**Solution.**
+With perfect information, the optimal bid is ``x_t = w_t``: as ``λ^+_t < λ_t < λ^-_t``, any imbalance
+loses money. The revenue is then ``∑_t λ_t w_t``.
+
+---
+**Question 4.** A naive producer bids the forecast ``x_t = φ(\overline{v}_t)``.
+Simulate this bid on 10,000 scenarios. Compute the expected revenue, the expected
+imbalance cost and a 95% confidence interval.
+
+---
+
+**Solution.**
+```julia
+wind_test = generate_wind_scenarios(farm, v_forecast, 10_000; seed=42)
+ws_revenue = [sum(λ .* wind_test[:, k]) for k in 1:size(wind_test, 2)]
+
+rev_forecast = evaluate_bid(w_forecast, λ, λp, λm, wind_test)
+imbalance_cost = ws_revenue .- rev_forecast
+
+ci(v) = 1.96 * std(v) / sqrt(length(v))
+println("Expected revenue:        ", mean(rev_forecast), " ± ", ci(rev_forecast))
+println("Expected imbalance cost: ", mean(imbalance_cost), " ± ", ci(imbalance_cost))
+```
+
+# Part II: Two-stage stochastic program
+We approximate the uncertainty by ``N`` scenarios ``w^1, ⋯, w^N``, each with probability ``1/N``
+(*Sample Average Approximation*, SAA). We introduce the second-stage variables
+- ``Δ^+_{t,k} ≥ 0``: surplus at hour ``t`` in scenario ``k`` [MWh]
+- ``Δ^-_{t,k} ≥ 0``: deficit at hour ``t`` in scenario ``k`` [MWh]
+- ``0 ≤ y_{t,k} ≤ w^k_t``: delivered energy at hour ``t`` in scenario ``k`` [MWh]
+
+The two-stage stochastic program writes
+```math
+\begin{aligned}
+\max_{x, Δ^+, Δ^-, y} \; & ∑_{t=1}^T λ_t x_t + \frac{1}{N} ∑_{k=1}^N ∑_{t=1}^T \Big( λ^+_t Δ^+_{t,k} - λ^-_t Δ^-_{t,k} \Big) \\
+\text{s.t.}\quad & y_{t,k} - x_t = Δ^+_{t,k} - Δ^-_{t,k} \\
+                 & 0 ≤ x_t ≤ \overline{W} \; , \quad 0 ≤ y_{t,k} ≤ w^k_t \; , \quad Δ^+_{t,k}, Δ^-_{t,k} ≥ 0
+\end{aligned}
+```
+
+---
+**Question 5.** Which variables are the first-stage variables? The second-stage variables?
+Write the second-stage value function ``Q(x, w)``. Show that ``Q`` is concave in ``x``.
+
+---
+
+**Solution.**
+The bid ``x`` is decided before the wind is known (first stage). The surplus, deficit and
+delivered energy depend on the scenario (second stage). The value function is
+```math
+Q(x, w) = \max_{y, Δ^±} \Big\{ ∑_t λ^+_t Δ^+_t - λ^-_t Δ^-_t \;:\; y_t - x_t = Δ^+_t - Δ^-_t,\; 0 ≤ y ≤ w,\; Δ^± ≥ 0 \Big\}
+```
+This is the value of a parametric LP where ``x`` only appears in the right-hand side of the
+constraints. By LP duality, ``Q(\cdot, w)`` is the minimum of finitely many affine functions of ``x``:
+it is concave and polyhedral. Here, ``Q(x, w) = ∑_t λ^+_t (w_t - x_t)^+ - λ^-_t (x_t - w_t)^+``.
+
+We implement the problem with JuMP:
+
+```julia
+using JuMP, HiGHS
+
+"""
+    build_two_stage_model(farm, λ, λp, λm, wind)
+
+Build the SAA of the two-stage bidding problem on the scenarios `wind`
+(matrix of dimension `(T, n_scenarios)`).
+"""
+function build_two_stage_model(farm::WindFarm, λ, λp, λm, wind::Matrix)
+    T, N = size(wind)
+    model = Model()
+    # First stage
+    @variable(model, 0.0 <= x[1:T] <= farm.Wmax)
+    # Second stage
+    @variable(model, 0.0 <= y[t=1:T, k=1:N] <= wind[t, k])
+    @variable(model, Δp[1:T, 1:N] >= 0.0)
+    @variable(model, Δm[1:T, 1:N] >= 0.0)
+    @constraint(model, balance[t=1:T, k=1:N], y[t, k] - x[t] == Δp[t, k] - Δm[t, k])
+    @objective(
+        model,
+        Max,
+        sum(λ[t] * x[t] for t in 1:T) +
+        sum(λp[t] * Δp[t, k] - λm[t] * Δm[t, k] for t in 1:T, k in 1:N) / N
+    )
+    return model
+end
+```
+
+```julia
+N = 100
+wind_train = generate_wind_scenarios(farm, v_forecast, N; seed=1)
+saa_model = build_two_stage_model(farm, λ, λp, λm, wind_train)
+JuMP.set_optimizer(saa_model, HiGHS.Optimizer)
+JuMP.set_silent(saa_model)
+JuMP.optimize!(saa_model)
+x_saa = JuMP.value.(saa_model[:x])
+JuMP.objective_value(saa_model)
+```
+
+---
+**Question 6.** What is the number of variables and constraints of the LP, as a function
+of ``T`` and ``N``? Solve the problem for ``N ∈ \{10, 100, 1000, 2000\}``
+and plot the solution time against ``N``.
+
+---
+
+**Solution.**
+There are ``T + 3TN`` variables and ``TN`` equality constraints (plus bounds).
+```julia
+Ns = [10, 100, 1000, 2000]
+times = Float64[]
+for n in Ns
+    w_n = generate_wind_scenarios(farm, v_forecast, n; seed=1)
+    m = build_two_stage_model(farm, λ, λp, λm, w_n)
+    JuMP.set_optimizer(m, HiGHS.Optimizer)
+    JuMP.set_silent(m)
+    JuMP.optimize!(m)
+    push!(times, JuMP.solve_time(m))
+end
+plot(Ns, times, xscale=:log10, yscale=:log10, marker=:circle, lw=2.0, color=:black, label="")
+xlabel!("Number of scenarios N")
+ylabel!("Solution time [s]")
+```
+
+---
+**Question 7.** Plot the optimal bid ``x^\star`` together with the forecast and the scenarios.
+Is ``x^\star`` above or below the forecast? Why?
+
+---
+
+**Solution.**
+```julia
+plot(wind_train, lw=0.5, color=:gray, label="")
+plot!(w_forecast, lw=3.0, color=:darkblue, label="forecast")
+plot!(x_saa, lw=3.0, color=:darkred, label="two-stage bid")
+xlabel!("Hours")
+ylabel!("Energy [MWh]")
+```
+With ``α^+ = 0.8`` and ``α^- = 1.3``, a deficit (penalty ``0.3 λ_t``) is more costly than
+a surplus (loss ``0.2 λ_t``). The producer bids conservatively, below the median production:
+except for a few hours, the bid is below the forecast.
+
+# Part III: Explicit solution
+Without storage, the objective and the constraints separate hour by hour. For each hour ``t``
+we have to solve a one-dimensional problem:
+```math
+\max_{0 ≤ x_t ≤ \overline{W}} \; λ_t x_t + \mathbb{E}\Big[ λ^+_t (w_t - x_t)^+ - λ^-_t (x_t - w_t)^+ \Big]
+```
+This is the well-known *newsvendor problem*.
+
+---
+**Question 8.** Let ``F_t`` be the cumulative distribution function of ``w_t``. Show that an
+optimal bid satisfies
+```math
+F_t(x_t^\star) = \frac{λ_t - λ^+_t}{λ^-_t - λ^+_t} \; ,
+```
+that is, ``x^\star_t`` is a quantile of the wind production. What is this quantile here?
+
+---
+
+**Solution.**
+Let ``f(x) = λ_t x + \mathbb{E}[λ^+_t (w_t - x)^+ - λ^-_t (x - w_t)^+]``. The function ``f`` is concave and
+its (super)derivative is
+```math
+f'(x) = λ_t - λ^+_t \, \mathbb{P}[w_t > x] - λ^-_t \, \mathbb{P}[w_t ≤ x]
+      = (λ_t - λ^+_t) - (λ^-_t - λ^+_t) F_t(x) \; .
+```
+Setting ``f'(x) = 0`` gives the result. With ``λ^±_t = α^± λ_t``, the quantile
+``(1 - α^+) / (α^- - α^+) = 0.4`` does not depend on ``t``.
+
+---
+**Question 9.** For the empirical distribution of the ``N`` scenarios, the quantile is
+``x_t = w^{(⌈qN⌉)}_t``, the ``⌈qN⌉``-th smallest value among ``w^1_t, ⋯, w^N_t``.
+Implement this formula and check that it gives the same optimal value as the LP.
+Is the solution of the LP unique?
+
+---
+
+**Solution.**
+```julia
+function newsvendor_bid(λ, λp, λm, wind::Matrix)
+    T, N = size(wind)
+    x = zeros(T)
+    for t in 1:T
+        q = (λ[t] - λp[t]) / (λm[t] - λp[t])
+        x[t] = sort(wind[t, :])[ceil(Int, q * N)]
+    end
+    return x
+end
+
+x_nv = newsvendor_bid(λ, λp, λm, wind_train)
+mean(evaluate_bid(x_nv, λ, λp, λm, wind_train)), JuMP.objective_value(saa_model)
+```
+The two values coincide. The solution is not unique when ``qN`` is an integer: any bid between
+the ``qN``-th and the ``(qN+1)``-th smallest values is optimal (here ``qN = 40``).
+The bid is also not unique at hours where several scenarios give ``0`` or ``\overline{W}``.
+
+---
+**Question 10.** How does the optimal quantile evolve when ``α^- → 1``? When ``α^+ → 0``?
+Interpret.
+
+---
+
+**Solution.**
+With ``q = (1 - α^+) / (α^- - α^+)``:
+when ``α^- → 1`` the deficit costs the day-ahead price, so committing is free: ``q → 1``
+and the producer bids the maximum plausible production.
+When ``α^+ → 0`` the surplus is worthless, so ``q → 1/α^-`` increases: the producer bids more
+aggressively to sell its energy on the day-ahead market, as long as the deficit penalty stays moderate.
+
+# Part IV: The value of the stochastic solution
+We compare the following quantities, all evaluated on a large test set:
+- **WS** (*wait-and-see*): the revenue with perfect information, ``\mathbb{E}[∑_t λ_t w_t]``.
+- **RP** (*recourse problem*): the revenue of the two-stage solution.
+- **EEV**: the revenue of the bid ``\mathbb{E}[w_t]`` (the solution of the deterministic problem on the mean scenario).
+
+The *expected value of perfect information* is ``\text{EVPI} = \text{WS} - \text{RP}`` and the
+*value of the stochastic solution* is ``\text{VSS} = \text{RP} - \text{EEV}``.
+
+---
+**Question 11.** Compute WS, RP, EEV, EVPI and VSS. Why do we evaluate them on new scenarios,
+not on the scenarios used to compute ``x^\star``? Show that ``\text{EEV} ≤ \text{RP} ≤ \text{WS}``.
+
+---
+
+**Solution.**
+The SAA value is biased upward: ``x^\star`` is optimized on the training scenarios, so its
+in-sample value is too optimistic. Evaluating on independent scenarios removes the bias.
+The inequalities hold because the mean-value bid is feasible for the two-stage
+problem, and the two-stage problem is a restriction of the wait-and-see problem
+(``x`` cannot depend on ``w``).
+```julia
+x_ev = vec(mean(wind_train, dims=2))
+WS = mean(ws_revenue)
+RP = mean(evaluate_bid(x_saa, λ, λp, λm, wind_test))
+EEV = mean(evaluate_bid(x_ev, λ, λp, λm, wind_test))
+(WS=WS, RP=RP, EEV=EEV, EVPI=WS - RP, VSS=RP - EEV)
+```
+
+---
+**Question 12.** Solve the SAA for ``N ∈ \{5, 10, 20, 50, 100, 500, 1000\}``. Plot the
+in-sample value and the out-of-sample value against ``N``, both averaged over 20 independent
+training samples. Comment.
+
+---
+
+**Solution.**
+```julia
+Ns = [5, 10, 20, 50, 100, 500, 1000]
+nrep = 20
+in_sample = zeros(length(Ns), nrep)
+out_sample = zeros(length(Ns), nrep)
+for (i, n) in enumerate(Ns), r in 1:nrep
+    w_n = generate_wind_scenarios(farm, v_forecast, n; seed=1000 * i + r)
+    x_n = newsvendor_bid(λ, λp, λm, w_n)   # same as the LP, much faster
+    in_sample[i, r] = mean(evaluate_bid(x_n, λ, λp, λm, w_n))
+    out_sample[i, r] = mean(evaluate_bid(x_n, λ, λp, λm, wind_test))
+end
+ci_rep(A) = 1.96 .* vec(std(A, dims=2)) ./ sqrt(nrep)
+plot(Ns, vec(mean(in_sample, dims=2)), ribbon=ci_rep(in_sample), xscale=:log10, marker=:circle, lw=2.0, label="in-sample")
+plot!(Ns, vec(mean(out_sample, dims=2)), ribbon=ci_rep(out_sample), marker=:circle, lw=2.0, label="out-of-sample")
+hline!([RP], ls=:dash, color=:black, label="RP (N=100)")
+xlabel!("Number of scenarios N")
+ylabel!("Expected revenue [€]")
+```
+For a single training sample the in-sample value is very noisy: it can be above or below the true value.
+*On average*, it overestimates the true optimal value (optimization bias), and the gap closes
+as ``N`` grows. The out-of-sample value is always below the true optimal value. It increases
+with ``N`` and converges to it. The two curves give a statistical confidence interval on the optimal value.
+
+---
+**Question 13.** Plot the VSS as a function of the deficit ratio ``α^- ∈ [1, 3]``, and as a function of
+the forecast error ``σ ∈ [0.1, 1.5]``. When is stochastic optimization worth the effort?
+
+---
+
+**Solution.**
+```julia
+function vss(; α_minus=1.3, σ=0.7, N=500)
+    lp, lm = imbalance_prices(λ; α_plus=0.8, α_minus=α_minus)
+    w_tr = generate_wind_scenarios(farm, v_forecast, N; σ=σ, seed=1)
+    w_te = generate_wind_scenarios(farm, v_forecast, 10_000; σ=σ, seed=42)
+    rp = mean(evaluate_bid(newsvendor_bid(λ, lp, lm, w_tr), λ, lp, lm, w_te))
+    eev = mean(evaluate_bid(vec(mean(w_tr, dims=2)), λ, lp, lm, w_te))
+    return rp - eev
+end
+
+αs = 1.0:0.1:3.0
+σs = 0.1:0.1:1.5
+p1 = plot(αs, [vss(α_minus=a) for a in αs], lw=2.0, color=:black, label="", xlabel="α⁻", ylabel="VSS [€]")
+p2 = plot(σs, [vss(σ=s) for s in σs], lw=2.0, color=:black, label="", xlabel="σ [m/s]", ylabel="VSS [€]")
+plot(p1, p2, layout=(1, 2))
+```
+The VSS is close to zero for ``α^- = 1.2``, where ``q = 1/2``: the optimal bid is the median,
+which is close to the mean. It grows with the asymmetry of the penalties, in both directions
+(for ``α^- = 1``, ``q = 1`` and the optimal bid is the maximal production). It also grows with the
+forecast error. With a perfect forecast (``σ → 0``) the problem is deterministic and VSS = 0.
+
+# Part V: Going further
+
+### Coupling with a battery
+We add the battery of the previous tutorial next to the wind farm. The battery can only
+be charged with wind energy. In each scenario ``k``, the energy delivered to the grid is
+``y_{t,k} - b_{t,k} + p_{t,k}``, and the state of charge follows the dynamics of the battery.
+
+---
+**Question 14.** Write the two-stage program where the battery decisions ``(b, p, s)``
+are second-stage variables. Is the problem still separable by hour? Is there
+still an explicit solution?
+
+---
+
+**Solution.**
+```julia
+struct BatteryData
+    C::Float64
+    P::Float64
+    c::Float64
+    eta_p::Float64
+    eta_d::Float64
+end
+
+function build_two_stage_battery_model(farm::WindFarm, bat::BatteryData, λ, λp, λm, wind::Matrix)
+    T, N = size(wind)
+    model = build_two_stage_model(farm, λ, λp, λm, wind)
+    x, y, Δp, Δm = model[:x], model[:y], model[:Δp], model[:Δm]
+    @variable(model, 0.0 <= s[1:T+1, 1:N] <= bat.C)
+    @variable(model, 0.0 <= b[1:T, 1:N] <= bat.P)
+    @variable(model, 0.0 <= p[1:T, 1:N] <= bat.P)
+    @constraint(model, [k=1:N], s[1, k] == 0.0)
+    @constraint(model, [t=1:T, k=1:N], s[t+1, k] == s[t, k] - p[t, k] / bat.eta_p + bat.eta_d * b[t, k])
+    @constraint(model, [t=1:T, k=1:N], b[t, k] <= y[t, k])
+    # Replace the balance equation: the delivered energy includes the battery
+    delete.(model, model[:balance])
+    unregister(model, :balance)
+    @constraint(model, balance[t=1:T, k=1:N], y[t, k] - b[t, k] + p[t, k] - x[t] == Δp[t, k] - Δm[t, k])
+    return model
+end
+
+bat = BatteryData(5.0, 1.0, 0.0, 0.9, 0.9)
+bat_model = build_two_stage_battery_model(farm, bat, λ, λp, λm, wind_train)
+JuMP.set_optimizer(bat_model, HiGHS.Optimizer)
+JuMP.set_silent(bat_model)
+JuMP.optimize!(bat_model)
+x_bat = JuMP.value.(bat_model[:x])
+
+plot(x_saa, lw=2.0, color=:darkred, label="wind only")
+plot!(x_bat, lw=2.0, color=:darkgreen, label="wind + battery")
+xlabel!("Hours")
+ylabel!("Bid [MWh]")
+```
+The state of charge couples the hours together: the problem is no longer separable and we
+have to solve the full LP.
+
+---
+**Question 15.** In the previous model, the battery decisions at hour ``t`` depend on the whole
+scenario ``w^k_1, ⋯, w^k_T``, including the future wind. Is this realistic?
+Explain why the optimal value of the two-stage problem is an *upper bound* on the revenue of
+any implementable strategy. How could we fix the model?
+
+---
+
+**Solution.**
+The battery is operated in real time: at hour ``t`` the operator only knows ``w_1, ⋯, w_t``.
+The two-stage model violates this *non-anticipativity* constraint. It relaxes
+the true problem and overestimates the revenue. Two remedies are possible:
+(i) a multistage stochastic program on a scenario tree, with non-anticipativity constraints, or
+(ii) keep the two-stage bid ``x^\star`` and operate the battery with a non-anticipative
+policy (rolling horizon, or the SDP policy of the battery tutorial). Evaluating (ii) out-of-sample
+gives a lower bound on the optimal revenue.
+
+### Other extensions
+- **Uncertain day-ahead price.** Sample ``λ`` jointly with the wind using the Markov chain of
+  the battery tutorial. Is the problem still separable? What is the optimal bid when ``λ`` and ``w``
+  are independent?
+- **Risk aversion.** Maximize ``\mathbb{E}[R] - β \, \text{CVaR}_{0.95}[-R]`` using the Rockafellar–Uryasev
+  reformulation, and plot the expected revenue against the CVaR when ``β`` varies.
+- **Decomposition.** Solve the battery model with the L-shaped (Benders) method, using one
+  subproblem per scenario.

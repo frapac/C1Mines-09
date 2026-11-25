@@ -1,7 +1,7 @@
 ---
 title : Optimal management of an energy storage
 author : François Pacaud
-date : November, 18th 2024
+date : November 2026
 ---
 
 # Motivation
@@ -11,7 +11,7 @@ optimization modeler JuMP.
 - If you are new to optimization modeler, we recommend the [following tutorial](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/getting_started_with_JuMP/).
 
 Julia can be installed from [the official website](https://julialang.org/downloads).
-The source code and the data in this [git repository](https://github.com/frapac/C1Mines-09).
+The source code and the data are available in this [git repository](https://github.com/frapac/C1Mines-09).
 
 This tutorial uses the packages Plots.jl (for plotting), JuMP.jl (for the optimization
 modeler) and HiGHS.jl (for the optimization solver). All three packages can be installed
@@ -65,8 +65,8 @@ We start by writing a mathematical model for our energy storage. We introduce
 the following parameters:
 - ``C > 0``: battery capacity [MWh]
 - ``P > 0``: maximum battery charge/discharge in one hour [MWh]
-- ``0 < η_d < 1``: charge efficiency
-- ``0 < η_p < 1``: discharge efficiency
+- ``0 < η_d < 1``: charge efficiency (applied to the charged energy ``b_t``)
+- ``0 < η_p < 1``: discharge efficiency (applied to the discharged energy ``p_t``)
 - ``c \geq 0``: tax paid when injecting energy onto the network [€/MWh]
 Our decision variables are:
 - ``x_t``: State-of-Charge (SoC) of the battery at time ``t`` [MWh]
@@ -205,7 +205,7 @@ The stochastic model takes explicitly into account the uncertainties in the futu
 
 ### Markovian model
 We use a classical stochastic model for the energy price. The previous
-price vector `price` now encodes the average energy price ``\overline{λ}_t`` (a.k.a. expected value).
+price vector `price` now encodes a reference energy price ``\overline{λ}_t``.
 The log-deviation from the expected value is modeled by a stochastic process
 ``\{ ξ_t(ω) \}_{t}``, here modeled as a stationary Markov chain. The model writes,
 for all ``t= 1, ⋯, T``,
@@ -216,6 +216,8 @@ or, equivalently,
 ```math
 λ_t(ω) = \overline{λ}_t ×  \exp{ξ_t(ω) }
 ```
+Note that the expected price is ``\mathbb{E}[λ_t] = \overline{λ}_t \, \mathbb{E}[\exp ξ_t]``,
+which in general differs from ``\overline{λ}_t``.
 At each time step the uncertainty ``ξ_t(ω)`` can take ``N`` distinct values ``ξ_1, ⋯, ξ_N``.
 The number ``N`` is called the *lattice number* of the Markov chain.
 The transition between ``ξ_{t}`` and ``ξ_{t+1}`` are encoded by the following
@@ -284,8 +286,8 @@ The problem becomes stochastic. We aim at minimizing the expected value of the c
 ```
 We want to solve the previous stochastic problem using the Stochastic Dynamic Programming algorithm.
 For our Markovian model, the Dynamic Programming equations adapt as follows.
-The value functions ``\{ Q_{t,j} \}_{t,j}`` satisfy the recursive equations: Starting from ``V_T(x) = 0``,
-we solve
+The value functions ``\{ V_{t,i} \}_{t,i}`` and ``\{ Q_{t,j} \}_{t,j}`` satisfy the recursive equations: Starting from ``V_{T+1, i}(x) = 0``,
+we solve, for ``t = T, ⋯, 1``,
 ```math
 Q_{t, j}(x) = \left\{
 \begin{aligned}
@@ -301,7 +303,8 @@ and update the value function ``V_{t, i}`` for ``i = 1, ⋯, N`` as
 ```math
 V_{t, i} = ∑_{j=1}^N p_{ij} Q_{t, j}
 ```
-The function ``Q_{t, j}`` is called the *Bellman operator*.
+The function ``Q_{t, j}`` is the *cost-to-go* (or *Q-function*) when the
+current price is ``λ_{t,j}``; the mapping ``V_{t+1, j} \mapsto Q_{t, j}`` is the *Bellman operator*.
 
 ---
 **Question 5.** Write a pseudo-code that adapt the Stochastic Dynamic Programming algorithm
@@ -328,11 +331,11 @@ As ``V_{t, i}`` is convex, we get ``V_{t, i}(x) \leq \overline{V}_{t, i}(x)`` fo
 ---
 **Question 6.** Show that if we replace ``V_{t+1,j}`` by the inner interpolation
 ``\overline{V}_{t+1, j}``, we obtain the following
-upper approximation for the Bellman operator ``Q_{t, j}``:
+upper approximation for the cost-to-go ``Q_{t, j}``:
 ```math
 \overline{Q}_{t, j}(x) = \left\{
 \begin{aligned}
-\min_{x^+, p,b,\alpha } \; & \lambda_{t, j} \times (b - p) + c \times p + ∑_{k=1}^N α_k V_{t+1, j}^k \\
+\min_{x^+, p,b,\alpha } \; & \lambda_{t, j} \times (b - p) + c \times p + ∑_{k=1}^d α_k V_{t+1, j}^k \\
 \text{s.t.}   & x^+ = x - \frac{1}{η_p} p + η_d b \\
               & 0 ≤ p ≤ P \\
               & 0 ≤ b ≤ P \\
@@ -345,14 +348,14 @@ upper approximation for the Bellman operator ``Q_{t, j}``:
 ---
 
 We define a function that takes as input the next (discretized) value function ``V_{t+1,j}`` and implements
-the Bellman operator ``Q_{t, j}`` as a LP.
+the cost-to-go ``Q_{t, j}`` (with the inner interpolation of Question 6) as a LP.
 
 ```julia
 
 """
     build_subproblem_dp
 
-Implement the Bellman operator ``Q_{t, j}``.
+Implement the cost-to-go ``Q_{t, j}``, obtained by applying the Bellman operator to ``V_{t+1, j}``.
 
 # Argument
 - `data::BatteryData`: the battery's specification `data`
@@ -595,22 +598,49 @@ xlabel!("Number N of Markov chain lattices")
 
 
 ---
-**Question 11.** Let ``\overline{λ} = (\overline{λ}_1, ⋯, \overline{λ}_T)`` be the average price along time.
-We note by ``v(λ)`` the solution of the deterministic problem for a given price vector ``λ``.
-Show that ``v(\overline{λ})`` is an upper bound for the optimal value.
+**Question 11.** Let ``μ = (μ_1, ⋯, μ_T)``, with ``μ_t = \mathbb{E}[λ_t(ω)]``, be the expected price along time.
+We note by ``v(λ)`` the optimal value of the deterministic problem for a given price vector ``λ``.
+Show that ``v(μ)`` is an upper bound for the optimal value.
+Is ``v(\overline{λ})`` also an upper bound? Compute numerically ``v(μ)`` for ``N=8``.
 
 ---
 
 **Solution.**
+The optimal deterministic decisions computed with ``μ`` define an open-loop policy, which is
+feasible for the stochastic problem. As the cost is linear in the price, its expected cost is exactly ``v(μ)``.
+Hence ``v(μ)`` is an upper bound. This is not true for ``v(\overline{λ})`` in general,
+as ``\overline{λ}_t ≠ \mathbb{E}[λ_t]``.
+
+We compute the expected price by propagating the distribution of the Markov chain
+(the initial state ``ξ_0`` is drawn uniformly, as in `generate_price_scenarios`):
 ```julia
-UB = JuMP.objective_value(det_model)
+function expected_price(markov::StationaryMarkovChain, avg_price::Vector)
+    T = length(avg_price)
+    Nd = length(markov.x)
+    q = fill(1.0 / Nd, 1, Nd)  # distribution of ξ_0
+    μ = zeros(T)
+    for t in 1:T
+        q = q * markov.proba   # distribution of ξ_t
+        μ[t] = avg_price[t] * sum(q[j] * exp(markov.x[j]) for j in 1:Nd)
+    end
+    return μ
+end
+
+N = 8
+markov = import_markov_chain(N)
+μ = expected_price(markov, price)
+ub_model = build_deterministic_model(data, μ)
+JuMP.set_optimizer(ub_model, HiGHS.Optimizer)
+JuMP.set_silent(ub_model)
+JuMP.optimize!(ub_model)
+UB = JuMP.objective_value(ub_model)
 ```
 
 
 ---
 **Question 12.** Let ``λ^i = (λ^i_1, ⋯, λ^i_T) ∈ \mathbb{R}^T`` be a random realization of the price process ``\{λ_t(ω)\}_t``.
 Prove that for a given ``k``, the value ``\frac{1}{k} ∑_{i=1}^k v(λ^i)`` is a statistical lower-bound
-for the optimal value. Give a confidence interval. Compute numerically the upper-bound for ``N=8``.
+for the optimal value. Give a confidence interval. Compute numerically the lower-bound for ``N=8``.
 
 ---
 
@@ -631,6 +661,9 @@ for i in 1:k
 end
 
 LB = sum(vals) / k
+# 95% confidence interval (central limit theorem)
+half_width = 1.96 * std(vals) / sqrt(k)
+(LB - half_width, LB + half_width)
 
 ```
 
@@ -750,7 +783,7 @@ function DPPolicy(data, price, markov, V; optimizer=HiGHS.Optimizer)
     xmin, xmax = 0.0, data.C
     xgrids = collect(range(xmin, xmax, n_grid))
     models = Matrix{JuMP.Model}(undef, T, Nd)
-    # Build a cache that stores all the Bellman operator Q_{t, j}
+    # Build a cache that stores all the cost-to-go Q_{t, j}
     for t in 1:T, i in 1:Nd
         p = price[t] * exp(markov.x[i])
         models[t, i] = build_subproblem_dp(data, p, xgrids, V[t+1, i, :], optimizer, n_grid)
@@ -776,7 +809,7 @@ Simulate the behavior of `DPPolicy` on 1,000 scenarios.
 Plot the histogram of the cost and the evolution of 10 trajectories for the state-of-charge of the battery.
 Compare the value obtained in simulation with
 (1) the numerical optimal value obtained by SDP, and
-(2) the statistical upper-bound.
+(2) the upper bound (Question 11) and the statistical lower bound (Question 12).
 Comment the results.
 
 ---
@@ -806,7 +839,7 @@ ylabel!("SoC [MWh]")
 ```julia
 dp_sol = get_objective_value(V)
 
-(LB, dp_sol, mean_cost)
+(LB, dp_sol, mean_cost, UB)
 
 ```
 
@@ -826,13 +859,13 @@ v_{t, i}(x) ∈ ∂ V_{t, i}(x)
 
 The bound constraints ``0 \leq x_+ \leq C`` can be incorporated into the bound constraints porting on ``b`` and ``p``:
 ```math
-0 \leq b \leq \overline{b}(x) := \min\Big(\frac{c-x}{\eta_d}, P\Big) \; , \quad
+0 \leq b \leq \overline{b}(x) := \min\Big(\frac{C-x}{\eta_d}, P\Big) \; , \quad
 0 \leq p \leq \overline{p}(x) := \min\Big(\eta_p x, P\Big) \; .
 
 ```
-The Bellman operator ``Q_{t, j}(x)`` rewrites as
+The cost-to-go ``Q_{t, j}(x)`` rewrites as
 ```math
-Q_{t, j}(x_t) = \left\{
+Q_{t, j}(x) = \left\{
 \begin{aligned}
 \min_{x^+, p,b } \; & \lambda_{t, j} \times (b - p) + c \times p + V_{t+1, j}(x^+) \\
 \text{s.t.}   & x^+ = x - \frac{1}{η_p} p + η_d b \\
@@ -841,10 +874,10 @@ Q_{t, j}(x_t) = \left\{
 \end{aligned}
 \right.
 ```
-We introduce the following Lagrangian for previous optimization problem ``Q_{t+1, j}``:
+We introduce the following Lagrangian for the previous optimization problem defining ``Q_{t, j}``:
 ```math
-L(x^+, b, p, \beta, \gamma, \varepsilon, \pi) =
-\lambda_{t, j} (b - p) + c p + V_{t+1,j}(x)
+L(x^+, b, p, \beta, \gamma, \pi) =
+\lambda_{t, j} (b - p) + c p + V_{t+1,j}(x^+)
 -\underline{\beta} b + \overline{\beta} (b - \overline{b}(x))
 -\underline{\gamma} p + \overline{\gamma} (p - \overline{p}(x)) +
 \pi (x - \frac{1}{\eta_p} p + \eta_d b - x_+)
@@ -853,7 +886,7 @@ L(x^+, b, p, \beta, \gamma, \varepsilon, \pi) =
 
 ---
 **Question 15.**
-Write the KKT conditions of the Bellman operator ``Q_{t, j}`` and show they depend on
+Write the KKT conditions of the optimization problem defining ``Q_{t, j}`` and show they depend on
 the future sensitivity ``v_{t+1, j}(x_+) \in \partial V_{t+1, j}(x_+)``.
 
 ---
@@ -878,7 +911,7 @@ for ``v_{t+1,j}(x_+) \in \partial V_{t+1,j}(x_+)``:
 
 ---
 **Question 16.** Suppose that for all ``t``, the price is non-negative: ``λ_t ≥ 0``. Is it
-a reasonable assumption? Under this assumption, prove that we cannot charge and discharge the battery simultaneously
+a reasonable assumption? Under this assumption, and if the tax is positive (``c > 0``), prove that we cannot charge and discharge the battery simultaneously
 (or ``p × b = 0``: we say that ``p`` and ``b`` are *complementary* to each other).
 
 ---
@@ -887,8 +920,8 @@ a reasonable assumption? Under this assumption, prove that we cannot charge and 
 We suppose that both ``p > 0`` and ``b > 0``.
 According to the KKT conditions explicited in Question 15,
 the complementarity conditions
-imply ``\underline{\beta} = 0``, ``\overline{\beta} > 0`` and
-``\underline{\gamma} = 0``, ``\overline{\gamma} > 0``.
+imply ``\underline{\beta} = 0``, ``\overline{\beta} \geq 0`` and
+``\underline{\gamma} = 0``, ``\overline{\gamma} \geq 0``.
 We deduce:
 ```math
 \pi = \frac{1}{\eta_d} \Big( -\lambda_{t, j} - \overline{\beta} \Big) =
@@ -900,8 +933,10 @@ or equivalently,
 (1- \eta_p \eta_d) \lambda_{t, j} = -\eta_p \eta_d c - \eta_p \eta_d \overline{\gamma} - \overline{\beta}
 
 ```
-The left-hand-side is positive (as ``\eta_p \eta_d < 1``) and the right-hand-side is negative,
-leading to a contradiction. Hence we cannot have both ``p > 0`` and ``b > 0``, concluding
+The left-hand-side is non-negative (as ``\eta_p \eta_d < 1`` and ``\lambda_{t, j} \geq 0``),
+whereas the right-hand-side is bounded above by ``-\eta_p \eta_d c < 0`` (as ``c > 0``
+and ``(\overline{\gamma}, \overline{\beta}) \geq 0``), leading to a contradiction.
+(If ``c = 0``, the contradiction still holds as soon as ``\lambda_{t, j} > 0``.) Hence we cannot have both ``p > 0`` and ``b > 0``, concluding
 the proof.
 
 
@@ -991,30 +1026,30 @@ plot(framestyle=:origin, yticks=[(0.0), (0.0)], xticks=[(0.0), (0.0)])
 plot!(lambda, f1.(lambda), color=:black, lw=3.0, label=nothing)
 plot!(lambda, f2.(lambda), color=:black, lw=3.0, label=nothing)
 
-LB, UB = -22.0, 10.0
+ymin, ymax = -22.0, 10.0
 
 xx = 0:1:20
 plot!(xx, f2.(xx), color=:purple, alpha=0.3, fillrange=f1.(xx), label="Nothing")
-plot!(xx, f1.(xx), color=:red, alpha=0.3, fillrange=fill(UB, 21), label="Discharge")
-plot!(xx, fill(LB, 21), color=:green, alpha=0.3, fillrange=f2.(xx), label="Charge")
+plot!(xx, f1.(xx), color=:red, alpha=0.3, fillrange=fill(ymax, 21), label="Discharge")
+plot!(xx, fill(ymin, 21), color=:green, alpha=0.3, fillrange=f2.(xx), label="Charge")
 
 xx = -10:1:0
-plot!(xx, fill(LB, 11), fillrange = fill(UB, 11), alpha=.1, color=:black, label="Infeasible")
+plot!(xx, fill(ymin, 11), fillrange = fill(ymax, 11), alpha=.1, color=:black, label="Infeasible")
 
 annotate!(
     [1.8, 15.5, 10, 0.7, 20],
-    [data.eta_p * data.c + 1.0, f1(10), f1(15), UB-1, 1],
+    [data.eta_p * data.c + 1.0, f1(10), f1(15), ymax-1, 1],
     [
         text(L"\eta_p c", :black, :right, 10),
         text(L"\pi = \eta_p (c - \lambda)", :black, :right, 10),
-        text(L"\pi = -\eta_d \lambda", :black, :right, 10),
+        text(L"\pi = -\lambda / \eta_d", :black, :right, 10),
         text(L"\pi", :black, :right, 13),
         text(L"\lambda", :black, :right, 13),
     ],
     fontsize=5,
 )
 xlims!(-10.0, 20.0)
-ylims!(LB, UB)
+ylims!(ymin, ymax)
 
 ```
 
@@ -1035,9 +1070,9 @@ Using the monotonicity of ``v_{t+1, j}(\cdot)``, we deduce that only one of the 
 | Condition | Policy ``(b, p)`` |
 | --- | --- |
 | ``\pi_+ \leq -\frac{1}{\eta_d}\lambda_{t, j}`` | `` (\overline{b}(x), 0)`` |
-| ``\pi_0 \leq -\frac{1}{\eta_d}\lambda_{t, j} \leq \pi_+`` | `` \big((\pi^{-1}(-1/\eta_d \lambda_{t,j}) - x)/\eta_d, 0\big)`` |
+| ``\pi_0 \leq -\frac{1}{\eta_d}\lambda_{t, j} \leq \pi_+`` | `` \big((v_{t+1,j}^{-1}(-\lambda_{t,j}/\eta_d) - x)/\eta_d, \; 0\big)`` |
 | ``-\frac{1}{\eta_d} \lambda_{t, j} \leq \pi_0 \leq \eta_p (c - \lambda_{t, j})`` | `` (0, 0)`` |
-| ``\pi_-  \leq \eta_p (c - \lambda_{t, j})\leq \pi_0`` | `` (0, (\pi^{-1}(\eta_p(c - \lambda_{t,j}) - x) \times \eta_p)`` |
+| ``\pi_-  \leq \eta_p (c - \lambda_{t, j})\leq \pi_0`` | `` \big(0, \; \eta_p (x - v_{t+1,j}^{-1}(\eta_p(c - \lambda_{t,j})))\big)`` |
 | `` \eta_p (c - \lambda_{t, j})\leq \pi_-`` | `` (0, \overline{p}(x))`` |
 
 
@@ -1056,7 +1091,7 @@ Let ``q_{t, j}(x) \in \partial Q_{t, j}(x)``.
 As ``V_{t, i} = \sum_{j=1}^N p_{ij} Q_{t, j}``, we deduce the recursive
 equation on the sensitivity ``v_{t, i}``:
 ```math
-v_{t, j}(x) = \sum_{j=1}^N p_{ij} \times q_{t, j}(x)
+v_{t, i}(x) = \sum_{j=1}^N p_{ij} \times q_{t, j}(x)
 
 ```
 
@@ -1104,7 +1139,6 @@ function fast_dp(
     data::BatteryData,
     markov::StationaryMarkovChain,
     avg_price::Vector;
-    optimizer=HiGHS.Optimizer,
     n_grid=11,
 )
     T = length(avg_price)
@@ -1155,9 +1189,10 @@ function fast_dp(
                 elseif -data.eta_d * dv[t+1, j, c1] < price <= -data.eta_d * dv[t+1, j, c2]
                     g =  -price / data.eta_d
                     dq[t, j, i] = g
-                    kp = inverse_mapping(dv[t+1, j, :], g)
+                    # Next state must lie in [x, x + eta_d * bmax]
+                    kp = clamp(inverse_mapping(dv[t+1, j, :], g), c2, c1)
                     xp = xgrids[kp]
-                    (b, p) = ((xp - x) / data.eta_d, 0.0)
+                    (b, p) = (clamp((xp - x) / data.eta_d, 0.0, bmax), 0.0)
                 elseif -data.eta_d * dv[t+1, j, c2] < price <= -1.0/data.eta_p * dv[t+1, j, c2] + data.c
                     dq[t, j, i] = dv[t+1, j, c2]
                     (b, p) = (0.0, 0.0)
@@ -1165,9 +1200,10 @@ function fast_dp(
                 elseif -1.0/data.eta_p * dv[t+1, j, c2] + data.c < price <= -1.0/data.eta_p * dv[t+1, j, c3] + data.c
                     g = -(price - data.c) * data.eta_p
                     dq[t, j, i] = g
-                    kp = inverse_mapping(dv[t+1, j, :], g)
+                    # Next state must lie in [x - pmax / eta_p, x]
+                    kp = clamp(inverse_mapping(dv[t+1, j, :], g), c3, c2)
                     xp = xgrids[kp]
-                    (b, p) = (0.0, (x - xp) * data.eta_p)
+                    (b, p) = (0.0, clamp((x - xp) * data.eta_p, 0.0, pmax))
                 elseif -1.0/data.eta_p * dv[t+1, j, c3] + data.c <= price
                     if pmax == data.P
                         dq[t, j, i] = dv[t+1, j, c3]
@@ -1249,14 +1285,8 @@ struct FastDPPolicy
     dv::Array{Float64, 3}
 end
 
-function FastDPPolicy(data, price, markov, dv)
-    T = length(price)
-    Nd = size(V, 2)
-    n_grid = size(V, 3)
-    return DPPolicy(data, price, markov, models)
-end
-
 function (pol::FastDPPolicy)(t::Int, x::Float64, λ::Float64)
+    data = pol.data
     n_grid = size(pol.dv, 3)
     xmin, xmax = 0.0, data.C
     # Find nearest position in Markov chain
@@ -1283,16 +1313,16 @@ function (pol::FastDPPolicy)(t::Int, x::Float64, λ::Float64)
         (b, p) = (bmax, 0.0)
     elseif -data.eta_d * pol.dv[t+1, ind, c1] < λ <= -data.eta_d * pol.dv[t+1, ind, c2]
         g =  -λ / data.eta_d
-        kp = inverse_mapping(pol.dv[t+1, ind, :], g)
+        kp = clamp(inverse_mapping(pol.dv[t+1, ind, :], g), c2, c1)
         xp = xmin + ((kp-1) / (n_grid-1)) * (xmax - xmin)
-        (b, p) = ((xp - x) / data.eta_d, 0.0)
+        (b, p) = (clamp((xp - x) / data.eta_d, 0.0, bmax), 0.0)
     elseif -data.eta_d * pol.dv[t+1, ind, c2] < λ <= -1.0/data.eta_p * pol.dv[t+1, ind, c2] + data.c
         (b, p) = (0.0, 0.0)
     elseif -1.0/data.eta_p * pol.dv[t+1, ind, c2] + data.c < λ <= -1.0/data.eta_p * pol.dv[t+1, ind, c3] + data.c
         g = -(λ - data.c) * data.eta_p
-        kp = inverse_mapping(pol.dv[t+1, ind, :], g)
+        kp = clamp(inverse_mapping(pol.dv[t+1, ind, :], g), c3, c2)
         xp = xmin + ((kp-1) / (n_grid-1)) * (xmax - xmin)
-        (b, p) = (0.0, (x - xp) * data.eta_p)
+        (b, p) = (0.0, clamp((x - xp) * data.eta_p, 0.0, pmax))
     elseif -1.0/data.eta_p * pol.dv[t+1, ind, c3] + data.c <= λ
         (b, p) = (0.0, pmax)
     end
