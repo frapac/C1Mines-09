@@ -175,10 +175,12 @@ JuMP.optimize!(det_model)
 
 ---
 
+<!-- solution -->
 **Solution**
 ```julia
 MOI.get(det_model, MOI.SimplexIterations())
 ```
+<!-- end solution -->
 
 
 The final objective is:
@@ -438,6 +440,56 @@ Stochastic Dynamic Programming algorithm. We give right after a skeleton for the
 
 ---
 
+<!-- student -->
+```julia
+"""
+    solve_dp
+
+Solve the Stochastic Dynamic Programming recursive equations on a Markov chain.
+The subproblems are solved using a LP solver.
+
+## Arguments
+- `data::BatteryData`: battery's specification
+- `markov::StationaryMarkovChain`: Markov chain implementing the stochastic model
+- `avg_price::Vector{Float64}, dimension `T`: average value for the electricity price
+- `optimizer::MOI.AbstractOptimizer` (optional): LP solver
+- `n_grid::Int`: number of points used to discretize the SoC
+
+## Output
+
+- `V::Array{Float64, 3}`, dimension `(T+1, N, n_grid)`: value functions
+
+"""
+function solve_dp(
+    data::BatteryData,
+    markov::StationaryMarkovChain,
+    avg_price::Vector;
+    optimizer=HiGHS.Optimizer,
+    n_grid=11,
+)
+    T = length(avg_price)
+    horizon = T + 1
+
+    Nd = length(markov.x)
+
+    xmin = 0.0
+    xmax = data.C
+    xgrids = collect(range(xmin, xmax, n_grid))
+
+    V = zeros(horizon, Nd, n_grid)
+    Q = zeros(T, Nd, n_grid)
+
+    for t in reverse(1:T)
+        # TODO
+    end
+
+    return V
+end
+
+```
+<!-- end student -->
+
+<!-- solution -->
 **Solution:**
 ```julia
 """
@@ -499,6 +551,7 @@ function solve_dp(
 end
 
 ```
+<!-- end solution -->
 
 ---
 **Question 8.** Set ``N=4`` and ``d = 101``. Solve the Dynamic Programming equations using the function `solve_dp`.
@@ -507,6 +560,7 @@ at time ``t ∈ \{1, 25, 49, 72 \}``, at the lattice ``n=1``.
 
 ---
 
+<!-- solution -->
 **Solution:**
 ```julia
 N = 4
@@ -527,6 +581,7 @@ xlabel!("Battery SoC [MWh]")
 ylabel!("Future cost [€]")
 p
 ```
+<!-- end solution -->
 
 
 ---
@@ -536,6 +591,7 @@ What is the impact of the discretization on the solution time?
 
 ---
 
+<!-- solution -->
 **Solution:**
 
 ```julia
@@ -566,6 +622,7 @@ plot(discretization_sizes, exec_time, scale=:log10, marker=:+)
 xlabel!("Discretization d")
 ylabel!("Execution time (seconds)")
 ```
+<!-- end solution -->
 
 
 ---
@@ -574,6 +631,7 @@ Plot the evolution of the objective computed by SDP for ``N ∈ \{4, 8, 16, 32\}
 
 ---
 
+<!-- solution -->
 **Solution.**
 ```julia
 d = 101
@@ -594,6 +652,7 @@ fig = plot(1:length(n_lattices), solution, marker=:+, markersize=5, xticks=(1:le
 ylabel!("Solution (€)")
 xlabel!("Number N of Markov chain lattices")
 ```
+<!-- end solution -->
 
 
 
@@ -605,6 +664,7 @@ Is ``v(\overline{λ})`` also an upper bound? Compute numerically ``v(μ)`` for `
 
 ---
 
+<!-- solution -->
 **Solution.**
 The optimal deterministic decisions computed with ``μ`` define an open-loop policy, which is
 feasible for the stochastic problem. As the cost is linear in the price, its expected cost is exactly ``v(μ)``.
@@ -635,6 +695,7 @@ JuMP.set_silent(ub_model)
 JuMP.optimize!(ub_model)
 UB = JuMP.objective_value(ub_model)
 ```
+<!-- end solution -->
 
 
 ---
@@ -644,6 +705,7 @@ for the optimal value. Give a confidence interval. Compute numerically the lower
 
 ---
 
+<!-- solution -->
 **Solution.**
 ```julia
 N = 8
@@ -666,6 +728,7 @@ half_width = 1.96 * std(vals) / sqrt(k)
 (LB - half_width, LB + half_width)
 
 ```
+<!-- end solution -->
 
 ### Simulating optimal policies
 We want to implement a control policy for the battery. At each time
@@ -743,6 +806,7 @@ of `NaivePolicy` using the function `simulate_policy`. Plot the histogram of the
 
 ---
 
+<!-- solution -->
 **Solution.**
 ```julia
 nscen = 1000
@@ -764,6 +828,7 @@ plot(naive_soc[:, 1:10], lw=2.0, color=:black, legend=false)
 xlabel!("Time [h]")
 ylabel!("SoC [MWh]")
 ```
+<!-- end solution -->
 
 We write a policy that uses the value functions computed by the SDP algorithm
 to determine whether to charge/discharge the battery. The code is given below.
@@ -814,6 +879,7 @@ Comment the results.
 
 ---
 
+<!-- solution -->
 **Solution.**
 ```julia
 
@@ -842,6 +908,7 @@ dp_sol = get_objective_value(V)
 (LB, dp_sol, mean_cost, UB)
 
 ```
+<!-- end solution -->
 
 
 # Part III: Expliciting the solution
@@ -891,6 +958,7 @@ the future sensitivity ``v_{t+1, j}(x_+) \in \partial V_{t+1, j}(x_+)``.
 
 ---
 
+<!-- solution -->
 **Solution:**
 Using the Lagrangian, the KKT conditions of the LP problem writes out,
 for ``v_{t+1,j}(x_+) \in \partial V_{t+1,j}(x_+)``:
@@ -907,6 +975,7 @@ for ``v_{t+1,j}(x_+) \in \partial V_{t+1,j}(x_+)``:
 \end{aligned}
 
 ```
+<!-- end solution -->
 
 
 ---
@@ -916,6 +985,7 @@ a reasonable assumption? Under this assumption, and if the tax is positive (``c 
 
 ---
 
+<!-- solution -->
 **Solution:**
 We suppose that both ``p > 0`` and ``b > 0``.
 According to the KKT conditions explicited in Question 15,
@@ -938,6 +1008,7 @@ whereas the right-hand-side is bounded above by ``-\eta_p \eta_d c < 0`` (as ``c
 and ``(\overline{\gamma}, \overline{\beta}) \geq 0``), leading to a contradiction.
 (If ``c = 0``, the contradiction still holds as soon as ``\lambda_{t, j} > 0``.) Hence we cannot have both ``p > 0`` and ``b > 0``, concluding
 the proof.
+<!-- end solution -->
 
 
 ---
@@ -950,6 +1021,7 @@ and the sensitivity ``v_{t+1, j}(x_+)``.
 
 ---
 
+<!-- solution -->
 **Solution:** According to Question 16, we cannot have both ``p > 0`` and ``b >0``. As ``(b, p) \geq 0``,
 we obtain the three alternatives listed above.  We analyze the three cases one by one.
 
@@ -1074,6 +1146,7 @@ Using the monotonicity of ``v_{t+1, j}(\cdot)``, we deduce that only one of the 
 | ``-\frac{1}{\eta_d} \lambda_{t, j} \leq \pi_0 \leq \eta_p (c - \lambda_{t, j})`` | `` (0, 0)`` |
 | ``\pi_-  \leq \eta_p (c - \lambda_{t, j})\leq \pi_0`` | `` \big(0, \; \eta_p (x - v_{t+1,j}^{-1}(\eta_p(c - \lambda_{t,j})))\big)`` |
 | `` \eta_p (c - \lambda_{t, j})\leq \pi_-`` | `` (0, \overline{p}(x))`` |
+<!-- end solution -->
 
 
 
@@ -1086,6 +1159,7 @@ a LP solver.
 
 ---
 
+<!-- solution -->
 **Solution:**
 Let ``q_{t, j}(x) \in \partial Q_{t, j}(x)``.
 As ``V_{t, i} = \sum_{j=1}^N p_{ij} Q_{t, j}``, we deduce the recursive
@@ -1107,6 +1181,7 @@ The KKT conditions give
 
 ```
 where ``x_{j+}`` is the future state solution of the Bellman operator.
+<!-- end solution -->
 
 ---
 **Question 19.** Implement the new algorithm and show it returns the correct solution.
@@ -1114,6 +1189,7 @@ Compare its performance with the SDP algorithm implemented previously in the fun
 
 ---
 
+<!-- solution -->
 **Solution.**
 ```julia
 
@@ -1266,6 +1342,7 @@ xlabel!("Discretization d")
 ylabel!("Execution time (seconds)")
 
 ```
+<!-- end solution -->
 
 ---
 **Question 20.** Write the optimal policy. Plot the value of ``b`` and ``p`` w.r.t.
@@ -1274,6 +1351,7 @@ Explain why ``v_{t+1, j}(x_+)`` is called the *value of the stock*.
 
 ---
 
+<!-- solution -->
 **Solution.**
 
 ```julia
@@ -1363,4 +1441,5 @@ xlabel!("SoC at time t [MWh]")
 ylabel!("Energy [MWh]")
 
 ```
+<!-- end solution -->
 
